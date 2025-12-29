@@ -1,0 +1,457 @@
+{% extends "base.html" %}
+
+{% block title %}Lancer batch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Lancer un batch</h1>
+    <p>Selectionnez une ou plusieurs series pour lancer la collecte des donnees</p>
+</div>
+
+<!-- Auto-launch button -->
+<div class="card" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <strong>Lancement automatique</strong>
+        <p class="text-secondary" style="margin: 4px 0 0; font-size: 13px;">Lance les sets jamais traites ou les plus anciens</p>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <select id="auto-limit" style="padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-secondary);">
+            <option value="5">5 sets</option>
+            <option value="10" selected>10 sets</option>
+            <option value="20">20 sets</option>
+            <option value="50">50 sets</option>
+        </select>
+        <button id="auto-launch-btn" class="btn btn-primary">Lancer auto</button>
+    </div>
+</div>
+
+<!-- Queue status banner -->
+<div id="queue-status" class="card" style="display: none;">
+    <div class="card-header">
+        <h2>Queue de batchs</h2>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="badge badge-low" id="status-badge">En cours...</span>
+            <button id="stop-batch-btn" class="btn btn-sm" style="background: var(--accent-red); color: white;">Tout arreter</button>
+        </div>
+    </div>
+    <div id="queue-content">
+        <p>Chargement...</p>
+    </div>
+</div>
+
+<!-- Selection bar -->
+<div id="selection-bar" class="card" style="display: none; position: sticky; top: 0; z-index: 100; background: var(--bg-primary);">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span><strong id="selection-count">0</strong> set(s) selectionne(s)</span>
+        <div style="display: flex; gap: 8px;">
+            <button id="clear-selection-btn" class="btn btn-ghost btn-sm">Effacer</button>
+            <button id="launch-queue-btn" class="btn btn-primary">Lancer la queue</button>
+        </div>
+    </div>
+</div>
+
+<!-- Series list -->
+{% for serie in series_sets %}
+<div class="card">
+    <div class="card-header" style="cursor: pointer;" onclick="toggleSerie('{{ serie.serie_id }}')">
+        <h2 style="display: flex; align-items: center; gap: 12px;">
+            <span class="toggle-icon" id="icon-{{ serie.serie_id }}">+</span>
+            {{ serie.serie_name }}
+            <span class="badge badge-disabled">{{ serie.sets|length }} sets</span>
+        </h2>
+        <button class="btn btn-ghost btn-sm select-all-btn" data-serie="{{ serie.serie_id }}" onclick="event.stopPropagation(); selectAllSerie('{{ serie.serie_id }}')">
+            Selectionner tout
+        </button>
+    </div>
+    <div id="sets-{{ serie.serie_id }}" class="sets-container" style="display: none;">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 40px;"></th>
+                    <th>Set</th>
+                    <th>Date</th>
+                    <th class="text-right">Cartes</th>
+                    <th class="text-right">Avec donnees</th>
+                    <th class="text-right">Progression</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for set in serie.sets %}
+                <tr>
+                    <td>
+                        <input type="checkbox" class="set-checkbox" data-set-id="{{ set.id }}" data-set-name="{{ set.name }}" data-serie="{{ serie.serie_id }}">
+                    </td>
+                    <td>
+                        <div class="card-name">{{ set.name }}</div>
+                        <div class="card-meta mono">{{ set.id }}</div>
+                    </td>
+                    <td>{{ set.date or '-' }}</td>
+                    <td class="text-right">{{ set.card_count }}</td>
+                    <td class="text-right">{{ set.price_count }}</td>
+                    <td class="text-right">
+                        {% if set.card_count > 0 %}
+                            {% set pct = (set.price_count / set.card_count * 100)|round(0)|int %}
+                            <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                                <div style="width: 60px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
+                                    <div style="width: {{ pct }}%; height: 100%; background: {{ 'var(--accent-green)' if pct == 100 else 'var(--accent-blue)' }};"></div>
+                                </div>
+                                <span class="mono" style="width: 40px;">{{ pct }}%</span>
+                            </div>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endfor %}
+
+<style>
+    .toggle-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        background: var(--bg-secondary);
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: bold;
+        color: var(--text-secondary);
+    }
+
+    .sets-container table {
+        margin-top: 16px;
+    }
+
+    .set-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    .queue-item {
+        padding: 8px 12px;
+        margin: 4px 0;
+        border-radius: 4px;
+        background: var(--bg-secondary);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .queue-item.running {
+        background: rgba(59, 130, 246, 0.2);
+        border-left: 3px solid var(--accent-blue);
+    }
+
+    .queue-item.completed {
+        background: rgba(34, 197, 94, 0.2);
+    }
+
+    .queue-item.failed {
+        background: rgba(239, 68, 68, 0.2);
+    }
+</style>
+
+<script>
+    const selectedSets = new Set();
+
+    function toggleSerie(serieId) {
+        const container = document.getElementById('sets-' + serieId);
+        const icon = document.getElementById('icon-' + serieId);
+
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            icon.textContent = '-';
+        } else {
+            container.style.display = 'none';
+            icon.textContent = '+';
+        }
+    }
+
+    function selectAllSerie(serieId) {
+        const checkboxes = document.querySelectorAll(`.set-checkbox[data-serie="${serieId}"]`);
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+        checkboxes.forEach(cb => {
+            cb.checked = !allChecked;
+            updateSelection(cb);
+        });
+    }
+
+    function updateSelection(checkbox) {
+        const setId = checkbox.dataset.setId;
+        const setName = checkbox.dataset.setName;
+
+        if (checkbox.checked) {
+            selectedSets.add(JSON.stringify({set_id: setId, set_name: setName}));
+        } else {
+            selectedSets.delete(JSON.stringify({set_id: setId, set_name: setName}));
+        }
+
+        updateSelectionBar();
+    }
+
+    function updateSelectionBar() {
+        const bar = document.getElementById('selection-bar');
+        const count = document.getElementById('selection-count');
+
+        count.textContent = selectedSets.size;
+        bar.style.display = selectedSets.size > 0 ? 'block' : 'none';
+    }
+
+    // Checkbox event listeners
+    document.querySelectorAll('.set-checkbox').forEach(cb => {
+        cb.addEventListener('change', function() {
+            updateSelection(this);
+        });
+    });
+
+    // Clear selection
+    document.getElementById('clear-selection-btn').addEventListener('click', function() {
+        selectedSets.clear();
+        document.querySelectorAll('.set-checkbox').forEach(cb => cb.checked = false);
+        updateSelectionBar();
+    });
+
+    // Launch queue
+    document.getElementById('launch-queue-btn').addEventListener('click', async function() {
+        if (selectedSets.size === 0) return;
+
+        const sets = Array.from(selectedSets).map(s => JSON.parse(s));
+
+        this.disabled = true;
+        this.textContent = 'Ajout...';
+
+        try {
+            const response = await fetch('/api/batch/run', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ sets })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                // Clear selection
+                selectedSets.clear();
+                document.querySelectorAll('.set-checkbox').forEach(cb => cb.checked = false);
+                updateSelectionBar();
+
+                // Show queue status
+                showQueueStatus();
+                startStatusPolling();
+            } else {
+                alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            }
+        } catch (error) {
+            alert('Erreur reseau: ' + error.message);
+        } finally {
+            this.disabled = false;
+            this.textContent = 'Lancer la queue';
+        }
+    });
+
+    // Queue status
+    function showQueueStatus() {
+        document.getElementById('queue-status').style.display = 'block';
+    }
+
+    function hideQueueStatus() {
+        document.getElementById('queue-status').style.display = 'none';
+    }
+
+    let statusInterval = null;
+
+    function startStatusPolling() {
+        if (statusInterval) clearInterval(statusInterval);
+
+        updateQueueStatus();
+        statusInterval = setInterval(updateQueueStatus, 2000);
+    }
+
+    let hasStartedProcessing = false;  // Track if we've seen any processing
+
+    async function updateQueueStatus() {
+        try {
+            const response = await fetch('/api/batch/status');
+            const data = await response.json();
+
+            const content = document.getElementById('queue-content');
+            const badge = document.getElementById('status-badge');
+            const stopBtn = document.getElementById('stop-batch-btn');
+
+            if (data.running || data.pending_count > 0) {
+                hasStartedProcessing = true;  // Mark that processing has started
+                showQueueStatus();
+
+                // Current batch
+                let html = '';
+
+                if (data.current) {
+                    const c = data.current;
+                    const pct = c.cards_targeted > 0 ? Math.round((c.cards_succeeded + c.cards_failed) / c.cards_targeted * 100) : 0;
+                    html += `
+                        <div class="queue-item running">
+                            <div>
+                                <strong>${c.set_name}</strong>
+                                <span class="text-secondary">(${c.set_id})</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <span>${c.cards_succeeded}/${c.cards_targeted}</span>
+                                <div style="width: 80px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
+                                    <div style="width: ${pct}%; height: 100%; background: var(--accent-blue);"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    badge.textContent = `En cours (${pct}%)`;
+                }
+
+                // Pending
+                if (data.pending && data.pending.length > 0) {
+                    html += `<p style="margin: 12px 0 8px; color: var(--text-secondary);">En attente (${data.pending_count}):</p>`;
+                    data.pending.forEach((p, i) => {
+                        if (i < 5) { // Show max 5
+                            html += `
+                                <div class="queue-item">
+                                    <div>
+                                        <strong>${p.set_name}</strong>
+                                        <span class="text-secondary">(${p.set_id})</span>
+                                    </div>
+                                    <span class="badge badge-disabled">En attente</span>
+                                </div>
+                            `;
+                        }
+                    });
+                    if (data.pending_count > 5) {
+                        html += `<p class="text-secondary">... et ${data.pending_count - 5} autres</p>`;
+                    }
+                }
+
+                content.innerHTML = html || '<p>Queue vide</p>';
+                stopBtn.style.display = 'inline-block';
+            } else if (hasStartedProcessing) {
+                // Queue finished (only if we actually saw processing)
+                clearInterval(statusInterval);
+                statusInterval = null;
+
+                badge.textContent = 'Termine';
+                badge.className = 'badge badge-ok';
+                stopBtn.style.display = 'none';
+
+                content.innerHTML = `
+                    <p>Queue terminee!</p>
+                    <p>Termine: ${data.completed_count} | Echecs: ${data.failed_count}</p>
+                `;
+
+                // Refresh page after 3s
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            } else {
+                // No processing ever started, just stop polling
+                clearInterval(statusInterval);
+                statusInterval = null;
+                hideQueueStatus();
+            }
+        } catch (error) {
+            console.error('Erreur status:', error);
+        }
+    }
+
+    // Stop queue
+    document.getElementById('stop-batch-btn').addEventListener('click', async function() {
+        if (!confirm('Voulez-vous vraiment arreter toute la queue ?')) {
+            return;
+        }
+
+        this.disabled = true;
+        this.textContent = 'Arret...';
+
+        try {
+            const response = await fetch('/api/batch/stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                this.textContent = 'Arret demande';
+            }
+        } catch (error) {
+            alert('Erreur: ' + error.message);
+            this.disabled = false;
+            this.textContent = 'Tout arreter';
+        }
+    });
+
+    // Check initial status (only start polling if queue is active)
+    fetch('/api/batch/status')
+        .then(r => r.json())
+        .then(data => {
+            if (data.running || data.pending_count > 0) {
+                hasStartedProcessing = true;
+                showQueueStatus();
+                startStatusPolling();
+            }
+        });
+
+    // Auto-launch button
+    document.getElementById('auto-launch-btn').addEventListener('click', async function() {
+        const limit = document.getElementById('auto-limit').value;
+
+        this.disabled = true;
+        this.textContent = 'Chargement...';
+
+        try {
+            // Get priority sets
+            const priorityResponse = await fetch(`/api/batch/priority-sets?limit=${limit}`);
+            const priorityData = await priorityResponse.json();
+
+            if (!priorityData.sets || priorityData.sets.length === 0) {
+                alert('Aucun set a lancer');
+                return;
+            }
+
+            // Format sets for the queue
+            const sets = priorityData.sets.map(s => ({
+                set_id: s.set_id,
+                set_name: s.set_name
+            }));
+
+            // Launch batch
+            const response = await fetch('/api/batch/run', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ sets })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                showQueueStatus();
+                startStatusPolling();
+            } else {
+                alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            }
+        } catch (error) {
+            alert('Erreur reseau: ' + error.message);
+        } finally {
+            this.disabled = false;
+            this.textContent = 'Lancer auto';
+        }
+    });
+</script>
+{% endblock %}

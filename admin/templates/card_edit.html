@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Éditer {{ card.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Éditer la requête eBay</h1>
+    <p>{{ card.name }} · {{ card.set_name }}</p>
+</div>
+
+<div class="info-grid">
+    <div class="card">
+        <form method="POST">
+            <div class="form-group">
+                <label>Requête auto-générée (référence)</label>
+                <div class="code-block">{{ suggested_query }}</div>
+            </div>
+
+            <div class="form-group">
+                <label for="ebay_query_override">Override de la requête</label>
+                <textarea name="ebay_query_override" id="ebay_query_override" placeholder="Laisser vide pour utiliser la requête auto...">{{ card.ebay_query_override or '' }}</textarea>
+                <p style="margin-top: 8px; font-size: 13px; color: var(--text-muted);">
+                    Laisser vide pour utiliser la requête auto-générée
+                </p>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                <button type="submit" class="btn btn-success">Sauvegarder</button>
+                <a href="{{ url_for('card_detail', card_id=card.id) }}" class="btn btn-ghost">Annuler</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Aide à la construction</h2>
+        <table class="info-table">
+            <tr>
+                <td><code class="mono">"texte"</code></td>
+                <td>Recherche exacte</td>
+            </tr>
+            <tr>
+                <td><code class="mono">OR</code></td>
+                <td>L'un ou l'autre</td>
+            </tr>
+            <tr>
+                <td><code class="mono">-mot</code></td>
+                <td>Exclure un mot</td>
+            </tr>
+            <tr>
+                <td><code class="mono">"-expression"</code></td>
+                <td>Exclure une expression</td>
+            </tr>
+        </table>
+
+        <p style="margin-top: 20px; margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
+            Mots-clés négatifs recommandés :
+        </p>
+        <div class="code-block">-lot -lots -bundle -psa -cgc -graded -proxy -orica "-code card"</div>
+    </div>
+</div>
+{% endblock %}

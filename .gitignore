@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+.env
+
+# Data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Exports
+*.csv
+exports/
+
+# Config avec credentials
+config.yaml
+config.local.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+*.cache

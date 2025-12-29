@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Batches{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Historique des batches</h1>
+    <p>Exécutions du calcul de prix</p>
+</div>
+
+{% if batches %}
+<div style="margin-bottom: 12px;">
+    <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; color: var(--text-secondary);">
+        <input type="checkbox" id="toggle-details" checked onchange="toggleAllDetails(this.checked)">
+        Afficher les détails des sets
+    </label>
+</div>
+{% endif %}
+
+<div class="card" style="padding: 0; overflow: hidden;">
+    {% if batches %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Mode</th>
+                <th>Ciblées</th>
+                <th>Succès</th>
+                <th>Échecs</th>
+                <th>Durée</th>
+                <th>Sets traités</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for batch in batches %}
+            <tr>
+                <td class="mono">#{{ batch.id }}</td>
+                <td>{{ batch.started_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td><span class="badge badge-ok">{{ batch.mode.value }}</span></td>
+                <td>{{ "{:,}".format(batch.cards_targeted).replace(",", " ") }}</td>
+                <td class="price price-main">{{ "{:,}".format(batch.cards_succeeded).replace(",", " ") }}</td>
+                <td>{% if batch.cards_failed > 0 %}<span style="color: var(--accent-red);">{{ batch.cards_failed }}</span>{% else %}0{% endif %}</td>
+                <td>
+                    {% if batch.finished_at %}
+                        {{ ((batch.finished_at - batch.started_at).total_seconds() / 60)|round(1) }} min
+                    {% else %}
+                        <span class="badge badge-low">En cours...</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if batch_details.get(batch.id) %}
+                        <div>
+                            <strong style="color: var(--text-primary);">{{ batch_details[batch.id]|length }} set{% if batch_details[batch.id]|length > 1 %}s{% endif %}</strong>
+                            <div class="batch-set-details" style="padding: 8px 0; font-size: 12px; max-height: 200px; overflow-y: auto;">
+                                {% for set in batch_details[batch.id] %}
+                                <div style="display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid var(--border-subtle);">
+                                    <span style="color: var(--text-secondary);">{{ set.set_name }}</span>
+                                    <span class="mono" style="color: var(--text-primary); margin-left: 12px;">{{ set.count }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>Aucun batch exécuté</p>
+        <p style="margin-top: 8px; font-size: 13px;">Lancez <code class="mono">python3 cli.py run-batch</code></p>
+    </div>
+    {% endif %}
+</div>
+
+{% if batches and batches[0].notes %}
+<div class="card">
+    <h2>Dernier rapport</h2>
+    <div class="code-block">{{ batches[0].notes }}</div>
+</div>
+{% endif %}
+
+<script>
+function toggleAllDetails(show) {
+    document.querySelectorAll('.batch-set-details').forEach(el => {
+        el.style.display = show ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

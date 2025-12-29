@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Cartes{% endblock %}
+
+{% block content %}
+{% set filter_params = "search=" ~ search ~ "&has_data=" ~ has_data ~ "&set=" ~ set_filter ~ "&date_filter=" ~ date_filter ~ "&date_from=" ~ date_from ~ "&date_to=" ~ date_to ~ "&months_ago=" ~ months_ago ~ "&has_error=" ~ has_error %}
+<div class="page-header">
+    <h1>Cartes</h1>
+    <p>{{ "{:,}".format(total).replace(",", " ") }} cartes trouvées</p>
+</div>
+
+<form class="filters" method="GET">
+    <div class="filter-group">
+        <label>Rechercher</label>
+        <input type="text" name="search" placeholder="Nom, set, ID..." value="{{ search }}">
+    </div>
+    <div class="filter-group">
+        <label>Série / Extension</label>
+        <select name="set">
+            <option value="">Toutes les séries</option>
+            {% for serie in series_sets %}
+            <optgroup label="{{ serie.serie_name }}">
+                {% for s in serie.sets %}
+                <option value="{{ s.id }}" {% if set_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </optgroup>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>Données eBay</label>
+        <select name="has_data">
+            <option value="">Toutes</option>
+            <option value="yes" {% if has_data == 'yes' %}selected{% endif %}>Avec données</option>
+            <option value="no" {% if has_data == 'no' %}selected{% endif %}>Sans données</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>Date mise à jour</label>
+        <select name="date_filter" id="date_filter" onchange="toggleDateInputs()">
+            <option value="">Toutes</option>
+            <option value="range" {% if date_filter == 'range' %}selected{% endif %}>Plage de dates</option>
+            <option value="before" {% if date_filter == 'before' %}selected{% endif %}>Avant le...</option>
+            <option value="months" {% if date_filter == 'months' %}selected{% endif %}>X derniers mois</option>
+            <option value="never" {% if date_filter == 'never' %}selected{% endif %}>Jamais mis à jour</option>
+        </select>
+    </div>
+    <div class="filter-group date-range-inputs" id="date-range-group" style="{% if date_filter != 'range' %}display: none;{% endif %}">
+        <label>Du</label>
+        <input type="date" name="date_from" value="{{ date_from }}">
+    </div>
+    <div class="filter-group date-range-inputs date-before-inputs" id="date-to-group" style="{% if date_filter not in ['range', 'before'] %}display: none;{% endif %}">
+        <label>{% if date_filter == 'before' %}Avant le{% else %}Au{% endif %}</label>
+        <input type="date" name="date_to" value="{{ date_to }}">
+    </div>
+    <div class="filter-group months-inputs" id="months-group" style="{% if date_filter != 'months' %}display: none;{% endif %}">
+        <label>Derniers mois</label>
+        <select name="months_ago">
+            <option value="1" {% if months_ago == '1' %}selected{% endif %}>1 mois</option>
+            <option value="2" {% if months_ago == '2' %}selected{% endif %}>2 mois</option>
+            <option value="3" {% if months_ago == '3' %}selected{% endif %}>3 mois</option>
+            <option value="6" {% if months_ago == '6' %}selected{% endif %}>6 mois</option>
+            <option value="12" {% if months_ago == '12' %}selected{% endif %}>12 mois</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>Erreur</label>
+        <select name="has_error">
+            <option value="">Toutes</option>
+            <option value="yes" {% if has_error == 'yes' %}selected{% endif %}>Avec erreur</option>
+            <option value="no" {% if has_error == 'no' %}selected{% endif %}>Sans erreur</option>
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+</form>
+
+<script>
+function toggleDateInputs() {
+    const filter = document.getElementById('date_filter').value;
+    document.getElementById('date-range-group').style.display = filter === 'range' ? '' : 'none';
+    document.getElementById('date-to-group').style.display = (filter === 'range' || filter === 'before') ? '' : 'none';
+    document.getElementById('months-group').style.display = filter === 'months' ? '' : 'none';
+}
+</script>
+
+<!-- Légende des indicateurs -->
+<details class="card" style="cursor: pointer;">
+    <summary style="padding: 12px 16px; font-weight: 500; color: var(--text-secondary);">
+        ? Aide : signification des indicateurs
+    </summary>
+    <div style="padding: 0 16px 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.6;">
+        <table style="width: 100%; margin-top: 8px;">
+            <tr>
+                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>p20</strong></td>
+                <td>20e percentile des prix eBay. 20% des annonces sont en dessous de ce prix.</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>p50</strong></td>
+                <td>Médiane des prix eBay (50e percentile). Prix "central" du marché.</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>Ann.</strong></td>
+                <td>Nombre d'annonces eBay utilisées pour le calcul. <span style="color: var(--accent-green);">Vert si ≥10</span>, gris si ≥5, sinon faible fiabilité.</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>Disp.</strong></td>
+                <td>Dispersion = p80 / p20. Mesure l'écart entre prix bas et hauts. <span style="color: var(--accent-green);">≤2 = homogène</span>, ≤3 = acceptable, >3 = hétérogène.</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>Âge</strong></td>
+                <td>Âge médian des annonces en jours. <span style="color: var(--accent-green);">≤14j = données fraîches</span>, ≤30j = récent, >30j = ancien.</td>
+            </tr>
+            <tr>
+                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>CV</strong></td>
+                <td>Coefficient de Variation = écart-type / moyenne. Mesure la volatilité des prix en %. <span style="color: var(--accent-green);">≤30% = stable</span>, ≤50% = modéré, >50% = très variable.</td>
+            </tr>
+        </table>
+    </div>
+</details>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 50px;"></th>
+                <th>Carte</th>
+                <th>Set</th>
+                <th>Variant</th>
+                <th>p20</th>
+                <th>p50</th>
+                <th>p80</th>
+                <th>Ann.</th>
+                <th>Disp.</th>
+                <th>Âge</th>
+                <th>Maj</th>
+                <th>Erreur</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card, snapshot in cards %}
+            <tr>
+                <td style="width: 50px; padding: 4px;">
+                    <img src="{{ card.image_url }}" alt="{{ card.name }}" style="height: 50px; border-radius: 3px;" loading="lazy">
+                </td>
+                <td>
+                    <a href="{{ url_for('card_detail', card_id=card.id) }}?page={{ page }}&{{ filter_params }}" class="link card-name">{{ card.name }}</a>
+                    <div class="card-meta mono">{{ card.local_id }} {% if card.ebay_query_override %}· Override{% endif %}</div>
+                </td>
+                <td class="text-secondary">{{ card.set_name }}</td>
+                <td>
+                    <span class="badge badge-disabled">{{ card.variant.value if card.variant else 'NORMAL' }}</span>
+                </td>
+                <td>
+                    {% if snapshot and snapshot.p20 %}
+                        <span class="price">{{ "%.2f"|format(snapshot.p20) }} €</span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if snapshot and snapshot.p50 %}
+                        <span class="price">{{ "%.2f"|format(snapshot.p50) }} €</span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if snapshot and snapshot.p80 %}
+                        <span class="price">{{ "%.2f"|format(snapshot.p80) }} €</span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if snapshot and snapshot.sample_size %}
+                        <span class="{% if snapshot.sample_size >= 10 %}text-primary{% elif snapshot.sample_size >= 5 %}text-secondary{% else %}text-muted{% endif %}">
+                            {{ snapshot.sample_size }}
+                        </span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if snapshot and snapshot.dispersion %}
+                        <span class="{% if snapshot.dispersion <= 2 %}text-primary{% elif snapshot.dispersion <= 3 %}text-secondary{% else %}text-muted{% endif %}">
+                            {{ "%.1f"|format(snapshot.dispersion) }}
+                        </span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if snapshot and snapshot.age_median_days %}
+                        <span class="{% if snapshot.age_median_days <= 14 %}text-primary{% elif snapshot.age_median_days <= 30 %}text-secondary{% else %}text-muted{% endif %}">
+                            {{ snapshot.age_median_days|int }}j
+                        </span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if snapshot and snapshot.as_of_date %}
+                        <span class="text-secondary" style="font-size: 12px;">{{ snapshot.as_of_date.strftime('%d/%m/%y') }}</span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if card.last_error %}
+                        <span class="badge badge-error" title="{{ card.last_error }}" style="cursor: help; font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">{{ card.last_error[:20] }}{% if card.last_error|length > 20 %}...{% endif %}</span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="actions" style="display: flex; gap: 6px;">
+                        {% if card.effective_ebay_query %}
+                        <a href="https://www.ebay.fr/sch/i.html?_nkw={{ card.effective_ebay_query | urlencode }}&_sacat=183454" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" title="Rechercher sur eBay" style="padding: 4px 8px;">🔍</a>
+                        {% endif %}
+                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-ghost btn-sm">Éditer</a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% set pages = (total // per_page) + (1 if total % per_page else 0) %}
+{% if pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+        <a href="?page={{ page - 1 }}&{{ filter_params }}">←</a>
+    {% endif %}
+
+    {% for p in range(1, pages + 1) %}
+        {% if p == 1 or p == pages or (p >= page - 2 and p <= page + 2) %}
+            <a href="?page={{ p }}&{{ filter_params }}"
+               class="{% if p == page %}active{% endif %}">{{ p }}</a>
+        {% elif p == page - 3 or p == page + 3 %}
+            <span style="color: var(--text-muted); padding: 0 8px;">...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if page < pages %}
+        <a href="?page={{ page + 1 }}&{{ filter_params }}">→</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

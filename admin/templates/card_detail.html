@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}{{ card.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ card.name }}</h1>
+    <p class="mono">{{ card.tcgdex_id }}</p>
+</div>
+
+<div style="display: flex; gap: 12px; margin-bottom: 30px;">
+    <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning">Éditer la requête</a>
+    <form method="POST" action="{{ url_for('card_reprocess', card_id=card.id) }}" style="display: inline;">
+        <button type="submit" class="btn btn-primary">Collecter les données eBay</button>
+    </form>
+    {% if card.effective_ebay_query %}
+    <a href="https://www.ebay.fr/sch/i.html?_nkw={{ card.effective_ebay_query | urlencode }}&_sacat=183454" target="_blank" rel="noopener" class="btn btn-ok" style="background: #0064d2; color: white;">
+        Rechercher sur eBay
+    </a>
+    {% endif %}
+    <a href="{{ back_url | default(url_for('cards_list')) }}" class="btn btn-ghost">Retour</a>
+</div>
+
+<div class="card">
+    <div style="display: flex; gap: 24px; align-items: flex-start;">
+        <div style="flex-shrink: 0;">
+            <img src="{{ card.image_url }}" alt="{{ card.name }}" style="width: 180px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" loading="lazy">
+        </div>
+        <div style="flex: 1;">
+            <h2 style="margin-top: 0;">Informations</h2>
+            <table class="info-table">
+                <tr><td>Set</td><td>{{ card.set_name }}</td></tr>
+                <tr><td>Numéro</td><td class="mono">{{ card.local_id }}</td></tr>
+                <tr><td>Variant</td><td><span class="badge badge-disabled">{{ card.variant.value if card.variant else 'NORMAL' }}</span></td></tr>
+                <tr><td>Rareté</td><td>{{ card.rarity or '—' }}</td></tr>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Requête eBay</h2>
+    {% if card.ebay_query_override %}
+        <p style="margin-bottom: 12px;"><span class="badge badge-low">Override actif</span></p>
+        <div class="code-block">{{ card.ebay_query_override }}</div>
+        <p style="margin-top: 20px; margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">Requête auto-générée (non utilisée) :</p>
+    {% endif %}
+    <div class="code-block">{{ card.ebay_query or 'Non générée — lancez python3 cli.py generate-queries' }}</div>
+</div>
+
+<!-- Modal zoom photo -->
+<div id="photo-modal" onclick="closePhotoModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; cursor: pointer; align-items: center; justify-content: center;">
+    <img id="photo-modal-img" src="" alt="" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+    <button onclick="closePhotoModal()" style="position: absolute; top: 20px; right: 20px; background: var(--bg-primary); border: none; color: var(--text-primary); width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer;">&times;</button>
+</div>
+
+<!-- Annonces eBay -->
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">Annonces eBay</h2>
+        <button id="refresh-listings" class="btn btn-primary" onclick="loadListings(true)">
+            Actualiser depuis eBay
+        </button>
+    </div>
+    <div id="listings-container">
+        <div class="empty-state">
+            <p>Chargement des annonces...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+const cardId = {{ card.id }};
+let currentListings = [];
+let currentStats = null;
+let currentSnapshotDate = null;
+let currentSort = { field: 'price', direction: 'asc' };
+
+function formatListingDate(dateStr) {
+    if (!dateStr) return '—';
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return '—';
+        return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+        return '—';
+    }
+}
+
+function sortListings(field, direction = null) {
+    if (direction) {
+        // Direction explicite (clic sur flèche)
+        currentSort.field = field;
+        currentSort.direction = direction;
+    } else if (currentSort.field === field) {
+        // Toggle si même champ
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        // Nouveau champ
+        currentSort.field = field;
+        currentSort.direction = field === 'price' ? 'asc' : 'desc';
+    }
+
+    currentListings.sort((a, b) => {
+        let valA, valB;
+        if (field === 'price') {
+            valA = a.effective_price || a.price || 0;
+            valB = b.effective_price || b.price || 0;
+        } else if (field === 'date') {
+            valA = a.listing_date ? new Date(a.listing_date).getTime() : 0;
+            valB = b.listing_date ? new Date(b.listing_date).getTime() : 0;
+        } else if (field === 'title') {
+            valA = (a.title || '').toLowerCase();
+            valB = (b.title || '').toLowerCase();
+        }
+
+        if (currentSort.direction === 'asc') {
+            return valA > valB ? 1 : valA < valB ? -1 : 0;
+        } else {
+            return valA < valB ? 1 : valA > valB ? -1 : 0;
+        }
+    });
+
+    renderListings();
+}
+
+function getSortHeader(field, label) {
+    const isActive = currentSort.field === field;
+    const isAsc = currentSort.direction === 'asc';
+    return `
+        <div style="display: flex; align-items: center; gap: 4px;">
+            <span>${label}</span>
+            <div style="display: flex; flex-direction: column; line-height: 0.6; font-size: 10px;">
+                <span onclick="event.stopPropagation(); sortListings('${field}', 'asc')"
+                      style="cursor: pointer; opacity: ${isActive && isAsc ? '1' : '0.3'}; color: ${isActive && isAsc ? 'var(--primary)' : 'inherit'};">▲</span>
+                <span onclick="event.stopPropagation(); sortListings('${field}', 'desc')"
+                      style="cursor: pointer; opacity: ${isActive && !isAsc ? '1' : '0.3'}; color: ${isActive && !isAsc ? 'var(--primary)' : 'inherit'};">▼</span>
+            </div>
+        </div>
+    `;
+}
+
+function openPhotoModal(imageUrl) {
+    const modal = document.getElementById('photo-modal');
+    const img = document.getElementById('photo-modal-img');
+    img.src = imageUrl;
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closePhotoModal() {
+    const modal = document.getElementById('photo-modal');
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+// Fermer avec Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closePhotoModal();
+});
+
+function renderListings() {
+    const container = document.getElementById('listings-container');
+
+    if (currentListings.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <p>Aucune annonce stockée</p>
+                <p style="font-size: 14px; color: var(--text-secondary);">Cliquez sur "Actualiser depuis eBay" pour collecter les annonces</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                <div><strong>${currentListings.length}</strong> annonces (max 50)</div>
+                ${currentStats?.p10 ? `<div>p10: <span class="price">${currentStats.p10.toFixed(2)} €</span></div>` : ''}
+                ${currentStats?.p20 ? `<div>p20: <span class="price" style="font-weight: 600;">${currentStats.p20.toFixed(2)} €</span></div>` : ''}
+                ${currentStats?.p50 ? `<div>p50: <span class="price">${currentStats.p50.toFixed(2)} €</span></div>` : ''}
+                ${currentStats?.p80 ? `<div>p80: <span class="price">${currentStats.p80.toFixed(2)} €</span></div>` : ''}
+                ${currentStats?.p90 ? `<div>p90: <span class="price">${currentStats.p90.toFixed(2)} €</span></div>` : ''}
+            </div>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
+                ${currentStats?.dispersion ? `<div>Dispersion: <span class="${currentStats.dispersion > 4 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.dispersion.toFixed(2)}</span></div>` : ''}
+                ${currentStats?.cv != null ? `<div>CV: <span style="color: var(--text-primary);">${(currentStats.cv * 100).toFixed(0)}%</span></div>` : ''}
+                ${currentStats?.consensus_score != null ? `<div>Consensus: <span class="${currentStats.consensus_score >= 70 ? 'badge badge-ok' : currentStats.consensus_score < 50 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.consensus_score.toFixed(0)}%</span></div>` : ''}
+                ${currentStats?.age_median_days != null ? `<div>Âge médian: <span class="${currentStats.age_median_days > 30 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.age_median_days.toFixed(0)}j</span></div>` : ''}
+                ${currentStats?.pct_recent_7d != null ? `<div>< 7j: <span style="color: var(--text-primary);">${currentStats.pct_recent_7d.toFixed(0)}%</span></div>` : ''}
+                ${currentSnapshotDate ? `<div>Snapshot: ${currentSnapshotDate}</div>` : ''}
+            </div>
+        </div>
+        <div style="max-height: 600px; overflow-y: auto;">
+            <table style="margin: 0;">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">Photo</th>
+                        <th style="width: 100px;">${getSortHeader('price', 'Prix')}</th>
+                        <th>${getSortHeader('title', 'Titre')}</th>
+                        <th style="width: 100px;">${getSortHeader('date', 'Date')}</th>
+                        <th style="width: 80px;">Lien</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    for (const listing of currentListings) {
+        const basePrice = listing.price || 0;
+        const shipping = listing.shipping || 0;
+        const title = listing.title || '';
+        const url = listing.url || '';
+        const image = listing.image || '';
+        const listingDate = formatListingDate(listing.listing_date);
+
+        html += `
+            <tr>
+                <td style="padding: 4px;">
+                    ${image ? `<img src="${image}" alt="" onclick="openPhotoModal('${image}')" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: var(--bg-secondary); cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">` : '<div style="width: 50px; height: 50px; background: var(--bg-secondary); border-radius: 4px;"></div>'}
+                </td>
+                <td>
+                    <div class="price" style="font-weight: 600;">${basePrice.toFixed(2)} €</div>
+                    ${shipping > 0 ? `<div style="font-size: 11px; color: var(--text-secondary);">+ ${shipping.toFixed(2)} € port</div>` : '<div style="font-size: 11px; color: var(--accent-green);">Port gratuit</div>'}
+                </td>
+                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${title}">${title}</td>
+                <td class="mono" style="font-size: 12px; color: var(--text-secondary);">${listingDate}</td>
+                <td>
+                    ${url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">Voir</a>` : '—'}
+                </td>
+            </tr>
+        `;
+    }
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+}
+
+async function loadListings(refresh = false) {
+    const container = document.getElementById('listings-container');
+    const btn = document.getElementById('refresh-listings');
+
+    if (refresh) {
+        btn.disabled = true;
+        btn.textContent = 'Chargement...';
+    }
+
+    container.innerHTML = '<div class="empty-state"><p>Chargement des annonces...</p></div>';
+
+    try {
+        const url = `/api/cards/${cardId}/listings` + (refresh ? '?refresh=true' : '');
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.success) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <p style="color: var(--danger);">${data.error || 'Erreur lors du chargement'}</p>
+                    ${data.query ? `<p class="mono" style="font-size: 12px; margin-top: 8px;">Query: ${data.query}</p>` : ''}
+                </div>
+            `;
+            return;
+        }
+
+        // Stocker les données
+        currentListings = data.listings || [];
+        currentStats = data.stats || null;
+        currentSnapshotDate = data.snapshot_date || null;
+
+        // Trier par prix croissant par défaut
+        currentSort = { field: 'price', direction: 'asc' };
+        currentListings.sort((a, b) => {
+            const priceA = a.effective_price || a.price || 0;
+            const priceB = b.effective_price || b.price || 0;
+            return priceA - priceB;
+        });
+
+        renderListings();
+
+    } catch (error) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <p style="color: var(--danger);">Erreur: ${error.message}</p>
+            </div>
+        `;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Actualiser depuis eBay';
+    }
+}
+
+// Charger les annonces au chargement de la page
+document.addEventListener('DOMContentLoaded', () => loadListings(false));
+</script>
+
+{% if snapshots %}
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 24px 24px 0;">
+        <h2>Historique des snapshots</h2>
+    </div>
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Ann.</th>
+                    <th>p10</th>
+                    <th>p20</th>
+                    <th>p50</th>
+                    <th>p80</th>
+                    <th>p90</th>
+                    <th>Disp.</th>
+                    <th>CV</th>
+                    <th>Âge méd.</th>
+                    <th>Cons.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for snap in snapshots %}
+                <tr>
+                    <td class="mono">{{ snap.as_of_date }}</td>
+                    <td>{{ snap.active_count or '—' }}</td>
+                    <td class="price" style="font-size: 12px;">{{ "%.2f"|format(snap.p10) if snap.p10 else '—' }}</td>
+                    <td class="price" style="font-weight: 600;">{{ "%.2f"|format(snap.p20) if snap.p20 else '—' }}</td>
+                    <td class="price">{{ "%.2f"|format(snap.p50) if snap.p50 else '—' }}</td>
+                    <td class="price">{{ "%.2f"|format(snap.p80) if snap.p80 else '—' }}</td>
+                    <td class="price" style="font-size: 12px;">{{ "%.2f"|format(snap.p90) if snap.p90 else '—' }}</td>
+                    <td><span class="{% if snap.dispersion and snap.dispersion > 4 %}badge badge-low{% endif %}">{{ "%.2f"|format(snap.dispersion) if snap.dispersion else '—' }}</span></td>
+                    <td style="font-size: 12px;">{{ "%.0f%%"|format(snap.cv * 100) if snap.cv else '—' }}</td>
+                    <td><span class="{% if snap.age_median_days and snap.age_median_days > 30 %}badge badge-low{% endif %}">{{ "%.0fj"|format(snap.age_median_days) if snap.age_median_days else '—' }}</span></td>
+                    <td><span class="{% if snap.consensus_score and snap.consensus_score >= 70 %}badge badge-ok{% elif snap.consensus_score and snap.consensus_score < 50 %}badge badge-low{% endif %}">{{ "%.0f%%"|format(snap.consensus_score) if snap.consensus_score else '—' }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

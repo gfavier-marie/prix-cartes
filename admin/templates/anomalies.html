@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Anomalies{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Anomalies</h1>
+    <p>Cartes nécessitant une attention particulière</p>
+</div>
+
+<form class="filters" method="GET">
+    <div class="filter-group">
+        <label>Dispersion ></label>
+        <input type="number" name="dispersion" value="{{ dispersion_threshold }}" step="0.5" style="width: 100px;">
+    </div>
+    <div class="filter-group">
+        <label>Confiance <</label>
+        <input type="number" name="confidence" value="{{ confidence_threshold }}" style="width: 100px;">
+    </div>
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+</form>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 24px 24px 0;">
+        <h2>Haute dispersion <span class="badge badge-low" style="margin-left: 8px;">{{ high_dispersion|length }}</span></h2>
+        <p class="text-secondary" style="font-size: 14px; margin-top: 4px;">Requêtes eBay probablement trop larges</p>
+    </div>
+    {% if high_dispersion %}
+    <table>
+        <thead>
+            <tr>
+                <th>Carte</th>
+                <th>Set</th>
+                <th>Dispersion</th>
+                <th>p20</th>
+                <th>p80</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card, buy_price, snap in high_dispersion %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link card-name">{{ card.name }}</a>
+                </td>
+                <td class="text-secondary">{{ card.set_name }}</td>
+                <td><span class="badge badge-low">{{ "%.2f"|format(snap.dispersion) }}</span></td>
+                <td class="price">{{ "%.2f €"|format(snap.p20) if snap.p20 else '—' }}</td>
+                <td class="price">{{ "%.2f €"|format(snap.p80) if snap.p80 else '—' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning btn-sm">Éditer</a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>Aucune anomalie de dispersion</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 24px 24px 0;">
+        <h2>Confiance faible <span class="badge badge-disabled" style="margin-left: 8px;">{{ low_conf|length }}</span></h2>
+        <p class="text-secondary" style="font-size: 14px; margin-top: 4px;">Données insuffisantes ou incohérentes</p>
+    </div>
+    {% if low_conf %}
+    <table>
+        <thead>
+            <tr>
+                <th>Carte</th>
+                <th>Set</th>
+                <th>Confiance</th>
+                <th>Prix neuf</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card, buy_price in low_conf %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link card-name">{{ card.name }}</a>
+                </td>
+                <td class="text-secondary">{{ card.set_name }}</td>
+                <td><span class="badge badge-disabled">{{ buy_price.confidence_score }}%</span></td>
+                <td class="price">{{ "%.2f €"|format(buy_price.buy_neuf) if buy_price.buy_neuf else '—' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning btn-sm">Éditer</a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>Aucune anomalie de confiance</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 24px 24px 0;">
+        <h2>Fallback Cardmarket <span class="badge badge-ok" style="margin-left: 8px;">{{ mismatches|length }}</span></h2>
+        <p class="text-secondary" style="font-size: 14px; margin-top: 4px;">Prix eBay incohérents, utilisation de Cardmarket</p>
+    </div>
+    {% if mismatches %}
+    <table>
+        <thead>
+            <tr>
+                <th>Carte</th>
+                <th>Set</th>
+                <th>Prix neuf</th>
+                <th>CM trend</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card, buy_price in mismatches %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link card-name">{{ card.name }}</a>
+                </td>
+                <td class="text-secondary">{{ card.set_name }}</td>
+                <td class="price">{{ "%.2f €"|format(buy_price.buy_neuf) if buy_price.buy_neuf else '—' }}</td>
+                <td class="price">{{ "%.2f €"|format(card.cm_trend) if card.cm_trend else '—' }}</td>
+                <td>
+                    <div class="actions">
+                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning btn-sm">Éditer</a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>Aucun fallback Cardmarket</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
