@@ -178,7 +178,7 @@ class EbayClient:
         buying_options: Optional[list[str]] = None,
         filter_titles: bool = True,
         is_first_edition: bool = False,
-        is_reverse: bool = False,
+        is_reverse: Optional[bool] = None,
         card_number: Optional[str] = None,
         card_number_full: Optional[str] = None,
     ) -> EbaySearchResult:
@@ -273,7 +273,7 @@ class EbayClient:
         self,
         title: str,
         is_first_edition: bool = False,
-        is_reverse: bool = False,
+        is_reverse: Optional[bool] = None,
         card_number: Optional[str] = None,
         card_number_full: Optional[str] = None
     ) -> bool:
@@ -281,16 +281,17 @@ class EbayClient:
         import re
         title_lower = title.lower()
 
-        # Filtrage REVERSE / NORMAL
-        has_reverse = any(kw in title_lower for kw in self.REVERSE_KEYWORDS)
-        if is_reverse:
-            # Pour REVERSE: exclure si pas de marqueur reverse
-            if not has_reverse:
-                return True
-        else:
-            # Pour NORMAL: exclure si marqueur reverse present
-            if has_reverse:
-                return True
+        # Filtrage REVERSE / NORMAL (None = pas de filtre)
+        if is_reverse is not None:
+            has_reverse = any(kw in title_lower for kw in self.REVERSE_KEYWORDS)
+            if is_reverse:
+                # Pour REVERSE: exclure si pas de marqueur reverse
+                if not has_reverse:
+                    return True
+            else:
+                # Pour NORMAL: exclure si marqueur reverse present
+                if has_reverse:
+                    return True
 
         # Exclusions de base (lots, graded, etc.)
         for exclusion in self.TITLE_EXCLUSIONS_BASE:
@@ -397,7 +398,7 @@ class EbayClient:
         query: str,
         max_items: int = 100,
         is_first_edition: bool = False,
-        is_reverse: bool = False,
+        is_reverse: Optional[bool] = None,
         card_number: Optional[str] = None,
         card_number_full: Optional[str] = None,
         **kwargs

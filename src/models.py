@@ -192,6 +192,19 @@ class MarketSnapshot(Base):
     # Score de consensus
     consensus_score = Column(Float, nullable=True)   # % dans ±20% de p50
 
+    # Stats pour les annonces REVERSE (si carte non-REVERSE)
+    reverse_sample_size = Column(Integer, nullable=True)
+    reverse_p10 = Column(Float, nullable=True)
+    reverse_p20 = Column(Float, nullable=True)
+    reverse_p50 = Column(Float, nullable=True)
+    reverse_p80 = Column(Float, nullable=True)
+    reverse_p90 = Column(Float, nullable=True)
+    reverse_dispersion = Column(Float, nullable=True)
+    reverse_cv = Column(Float, nullable=True)
+    reverse_consensus_score = Column(Float, nullable=True)
+    reverse_age_median_days = Column(Float, nullable=True)
+    reverse_pct_recent_7d = Column(Float, nullable=True)
+
     # Ancre finale
     anchor_price = Column(Float, nullable=True)
     anchor_source = Column(Enum(AnchorSource), nullable=True)

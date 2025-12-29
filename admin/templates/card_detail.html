@@ -24,7 +24,7 @@
 <div class="card">
     <div style="display: flex; gap: 24px; align-items: flex-start;">
         <div style="flex-shrink: 0;">
-            <img src="{{ card.image_url }}" alt="{{ card.name }}" style="width: 180px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" loading="lazy">
+            <img src="{{ card.image_url }}" alt="{{ card.name }}" style="width: 180px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" loading="lazy" onerror="this.style.display='none'">
         </div>
         <div style="flex: 1;">
             <h2 style="margin-top: 0;">Informations</h2>
@@ -291,6 +291,99 @@ async function loadListings(refresh = false) {
 // Charger les annonces au chargement de la page
 document.addEventListener('DOMContentLoaded', () => loadListings(false));
 </script>
+
+{% if snapshots and snapshots[0].reverse_sample_size %}
+<!-- Section Stats Reverse -->
+<div class="card">
+    <div class="card-header">
+        <h2 style="margin: 0;">Annonces Reverse</h2>
+    </div>
+    <div id="reverse-listings-container">
+        <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                <div><strong>{{ snapshots[0].reverse_sample_size }}</strong> annonces</div>
+                {% if snapshots[0].reverse_p10 %}<div>p10: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p10) }} €</span></div>{% endif %}
+                {% if snapshots[0].reverse_p20 %}<div>p20: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(snapshots[0].reverse_p20) }} €</span></div>{% endif %}
+                {% if snapshots[0].reverse_p50 %}<div>p50: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p50) }} €</span></div>{% endif %}
+                {% if snapshots[0].reverse_p80 %}<div>p80: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p80) }} €</span></div>{% endif %}
+                {% if snapshots[0].reverse_p90 %}<div>p90: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p90) }} €</span></div>{% endif %}
+            </div>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
+                {% if snapshots[0].reverse_dispersion %}<div>Dispersion: <span class="{% if snapshots[0].reverse_dispersion > 4 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.2f"|format(snapshots[0].reverse_dispersion) }}</span></div>{% endif %}
+                {% if snapshots[0].reverse_cv is not none %}<div>CV: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_cv * 100) }}%</span></div>{% endif %}
+                {% if snapshots[0].reverse_consensus_score is not none %}<div>Consensus: <span class="{% if snapshots[0].reverse_consensus_score >= 70 %}badge badge-ok{% elif snapshots[0].reverse_consensus_score < 50 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_consensus_score) }}%</span></div>{% endif %}
+                {% if snapshots[0].reverse_age_median_days is not none %}<div>Âge médian: <span class="{% if snapshots[0].reverse_age_median_days > 30 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_age_median_days) }}j</span></div>{% endif %}
+                {% if snapshots[0].reverse_pct_recent_7d is not none %}<div>< 7j: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_pct_recent_7d) }}%</span></div>{% endif %}
+                <div>Snapshot: {{ snapshots[0].as_of_date }}</div>
+            </div>
+        </div>
+        <!-- Liste des annonces reverse -->
+        <div id="reverse-listings-table" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<script>
+// Charger les annonces reverse depuis les metadata
+(function() {
+    const cardId = {{ card.id }};
+    fetch(`/api/cards/${cardId}/listings`)
+        .then(r => r.json())
+        .then(data => {
+            const reverseListings = data.reverse_listings || [];
+            const container = document.getElementById('reverse-listings-table');
+
+            if (reverseListings.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px;">Aucune annonce reverse stockée</p>';
+                return;
+            }
+
+            let html = `<table style="margin: 0;">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">Photo</th>
+                        <th style="width: 100px;">Prix</th>
+                        <th>Titre</th>
+                        <th style="width: 100px;">Date</th>
+                        <th style="width: 80px;">Lien</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            for (const listing of reverseListings) {
+                const basePrice = listing.price || 0;
+                const shipping = listing.shipping || 0;
+                const title = listing.title || '';
+                const url = listing.url || '';
+                const image = listing.image || '';
+                let listingDate = '';
+                if (listing.listing_date) {
+                    const d = new Date(listing.listing_date);
+                    listingDate = d.toLocaleDateString('fr-FR');
+                }
+
+                html += `<tr>
+                    <td style="padding: 4px;">
+                        ${image ? `<img src="${image}" alt="" onclick="openPhotoModal('${image}')" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: var(--bg-secondary); cursor: pointer;">` : '<div style="width: 50px; height: 50px; background: var(--bg-secondary); border-radius: 4px;"></div>'}
+                    </td>
+                    <td>
+                        <div class="price" style="font-weight: 600;">${basePrice.toFixed(2)} €</div>
+                        ${shipping > 0 ? `<div style="font-size: 11px; color: var(--text-secondary);">+ ${shipping.toFixed(2)} € port</div>` : '<div style="font-size: 11px; color: var(--accent-green);">Port gratuit</div>'}
+                    </td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${title}">${title}</td>
+                    <td class="mono" style="font-size: 12px; color: var(--text-secondary);">${listingDate}</td>
+                    <td>
+                        ${url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">Voir</a>` : '—'}
+                    </td>
+                </tr>`;
+            }
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        })
+        .catch(() => {});
+})();
+</script>
+{% endif %}
 
 {% if snapshots %}
 <div class="card" style="padding: 0; overflow: hidden;">

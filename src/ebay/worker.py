@@ -57,6 +57,9 @@ class CollectionResult:
     query_used: Optional[str] = None
     warnings: list[str] = field(default_factory=list)
     items: list[EbayItem] = field(default_factory=list)  # Annonces collectees
+    # Stats pour les annonces reverse trouvees (si carte non-REVERSE)
+    reverse_stats: Optional[PriceStats] = None
+    reverse_items: list[EbayItem] = field(default_factory=list)
 
 
 class EbayWorker:
@@ -81,6 +84,14 @@ class EbayWorker:
     def set_fx_rates(self, rates: dict[str, float]) -> None:
         """Definit les taux de change."""
         self._fx_rates = rates
+
+    # Keywords pour identifier les cartes reverse (meme que dans client.py)
+    REVERSE_KEYWORDS = ["reverse", "rev ", " rev"]
+
+    def _is_reverse_item(self, item: EbayItem) -> bool:
+        """Verifie si un item est une carte reverse basé sur le titre."""
+        title_lower = item.title.lower()
+        return any(kw in title_lower for kw in self.REVERSE_KEYWORDS)
 
     def collect_for_card(self, card: Card) -> CollectionResult:
         """
@@ -113,6 +124,10 @@ class EbayWorker:
             is_promo_set = card.set_id in EbayQueryBuilder.PROMO_SETS
             card_number_full = None if is_promo_set else card.card_number_full
 
+            # Pour tous les variants SAUF REVERSE: recherche sans filtre reverse pour capturer les deux
+            # Pour REVERSE: filtrer uniquement les reverse
+            search_is_reverse = True if is_reverse else None
+
             # Recherche eBay avec filtres
             search_result = self.client.search_all(
                 query=query,
@@ -122,31 +137,53 @@ class EbayWorker:
                 buying_options=["FIXED_PRICE"],  # Pas d'enchères
                 filter_titles=True,  # Exclure lots/graded
                 is_first_edition=is_first_edition,
-                is_reverse=is_reverse,
+                is_reverse=search_is_reverse,
                 card_number=card.local_id,
                 card_number_full=card_number_full,
             )
 
             result.active_count = search_result.total
             result.warnings = search_result.warnings
-            result.items = search_result.items  # Stocker les annonces
 
-            if not search_result.items:
+            # Pour tous les variants SAUF REVERSE: separer les items normal et reverse
+            if not is_reverse:
+                normal_items = []
+                reverse_items = []
+                for item in search_result.items:
+                    if self._is_reverse_item(item):
+                        reverse_items.append(item)
+                    else:
+                        normal_items.append(item)
+
+                result.items = normal_items
+                result.reverse_items = reverse_items
+
+                # Calculer les stats pour les reverse si suffisamment d'items
+                if reverse_items:
+                    reverse_prices = self._normalize_prices(reverse_items)
+                    if len(reverse_prices) >= 1:  # Au moins 1 item pour les stats reverse
+                        result.reverse_stats = self._calculate_stats(
+                            reverse_prices, len(reverse_items), reverse_items
+                        )
+            else:
+                result.items = search_result.items
+
+            if not result.items:
                 result.success = False
                 result.error = "No items found"
                 return result
 
             # Normaliser et nettoyer les prix
-            prices = self._normalize_prices(search_result.items)
+            prices = self._normalize_prices(result.items)
 
             if len(prices) < self.config.min_sample_size:
                 result.success = False
                 result.error = f"No valid prices after normalization ({len(prices)} items)"
-                result.stats = PriceStats(sample_size=len(prices), raw_count=len(search_result.items))
+                result.stats = PriceStats(sample_size=len(prices), raw_count=len(result.items))
                 return result
 
             # Calcul des stats (avec items pour stats temporelles)
-            result.stats = self._calculate_stats(prices, len(search_result.items), search_result.items)
+            result.stats = self._calculate_stats(prices, len(result.items), result.items)
 
             # Ancre = p20
             if result.stats.p20 is not None:
@@ -369,6 +406,20 @@ class EbayWorker:
             snapshot.pct_old_30d = result.stats.pct_old_30d
             snapshot.consensus_score = result.stats.consensus_score
 
+        # Stats reverse (si carte NORMAL et annonces reverse trouvees)
+        if result.reverse_stats:
+            snapshot.reverse_sample_size = result.reverse_stats.sample_size
+            snapshot.reverse_p10 = result.reverse_stats.p10
+            snapshot.reverse_p20 = result.reverse_stats.p20
+            snapshot.reverse_p50 = result.reverse_stats.p50
+            snapshot.reverse_p80 = result.reverse_stats.p80
+            snapshot.reverse_p90 = result.reverse_stats.p90
+            snapshot.reverse_dispersion = result.reverse_stats.dispersion
+            snapshot.reverse_cv = result.reverse_stats.cv
+            snapshot.reverse_consensus_score = result.reverse_stats.consensus_score
+            snapshot.reverse_age_median_days = result.reverse_stats.age_median_days
+            snapshot.reverse_pct_recent_7d = result.reverse_stats.pct_recent_7d
+
         if result.anchor_price:
             snapshot.anchor_price = result.anchor_price
 
@@ -412,6 +463,25 @@ class EbayWorker:
                     "listing_date": item.listing_date,
                 }
                 for item in items[:50]  # Limiter a 50 pour ne pas exploser la DB
+            ]
+
+        # Stocker les annonces reverse separement
+        if result.reverse_items:
+            meta["reverse_listings"] = [
+                {
+                    "item_id": item.item_id,
+                    "title": item.title,
+                    "price": item.price,
+                    "currency": item.currency,
+                    "shipping": item.shipping_cost,
+                    "effective_price": item.effective_price,
+                    "url": item.item_web_url,
+                    "condition": item.condition,
+                    "seller": item.seller_username,
+                    "image": item.image_url,
+                    "listing_date": item.listing_date,
+                }
+                for item in result.reverse_items[:50]
             ]
 
         snapshot.set_raw_meta(meta)

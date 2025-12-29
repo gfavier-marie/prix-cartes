@@ -575,11 +575,28 @@ def create_app() -> Flask:
                     for item in result.items[:50]
                 ]
 
+                # Annonces reverse
+                reverse_listings = [
+                    {
+                        "title": item.title,
+                        "price": item.price,
+                        "shipping": item.shipping_cost,
+                        "currency": item.currency,
+                        "url": item.item_web_url,
+                        "condition": item.condition,
+                        "seller": item.seller_username,
+                        "image": item.image_url,
+                        "listing_date": item.listing_date,
+                    }
+                    for item in result.reverse_items[:50]
+                ] if result.reverse_items else []
+
                 return jsonify({
                     "success": True,
                     "query": result.query_used,
                     "total": result.active_count,
                     "listings": listings,
+                    "reverse_listings": reverse_listings,
                     "stats": {
                         "p10": result.stats.p10 if result.stats else None,
                         "p20": result.stats.p20 if result.stats else None,
@@ -608,6 +625,7 @@ def create_app() -> Flask:
 
                 meta = snapshot.get_raw_meta()
                 listings = meta.get("listings", [])
+                reverse_listings = meta.get("reverse_listings", [])
 
                 return jsonify({
                     "success": True,
@@ -615,6 +633,7 @@ def create_app() -> Flask:
                     "snapshot_date": str(snapshot.as_of_date),
                     "total": snapshot.active_count,
                     "listings": listings,
+                    "reverse_listings": reverse_listings,
                     "stats": {
                         "p10": snapshot.p10,
                         "p20": snapshot.p20,

@@ -643,8 +643,8 @@
                 .then(r => r.json())
                 .then(data => {
                     const el = document.querySelector('#api-usage .api-count');
-                    if (el && data.calls_today !== undefined) {
-                        el.textContent = data.calls_today;
+                    if (el && data.today_count !== undefined) {
+                        el.textContent = data.today_count;
                     }
                 })
                 .catch(() => {});

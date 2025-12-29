@@ -141,7 +141,7 @@ function toggleDateInputs() {
             {% for card, snapshot in cards %}
             <tr>
                 <td style="width: 50px; padding: 4px;">
-                    <img src="{{ card.image_url }}" alt="{{ card.name }}" style="height: 50px; border-radius: 3px;" loading="lazy">
+                    <img src="{{ card.image_url }}" alt="{{ card.name }}" style="height: 50px; border-radius: 3px;" loading="lazy" onerror="this.style.display='none'">
                 </td>
                 <td>
                     <a href="{{ url_for('card_detail', card_id=card.id) }}?page={{ page }}&{{ filter_params }}" class="link card-name">{{ card.name }}</a>
@@ -154,6 +154,9 @@ function toggleDateInputs() {
                 <td>
                     {% if snapshot and snapshot.p20 %}
                         <span class="price">{{ "%.2f"|format(snapshot.p20) }} €</span>
+                        {% if snapshot.reverse_p20 %}
+                        <div style="font-style: italic; color: var(--accent-blue);">{{ "%.2f"|format(snapshot.reverse_p20) }} €</div>
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
@@ -161,6 +164,9 @@ function toggleDateInputs() {
                 <td>
                     {% if snapshot and snapshot.p50 %}
                         <span class="price">{{ "%.2f"|format(snapshot.p50) }} €</span>
+                        {% if snapshot.reverse_p50 %}
+                        <div style="font-style: italic; color: var(--accent-blue);">{{ "%.2f"|format(snapshot.reverse_p50) }} €</div>
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
@@ -168,6 +174,9 @@ function toggleDateInputs() {
                 <td>
                     {% if snapshot and snapshot.p80 %}
                         <span class="price">{{ "%.2f"|format(snapshot.p80) }} €</span>
+                        {% if snapshot.reverse_p80 %}
+                        <div style="font-style: italic; color: var(--accent-blue);">{{ "%.2f"|format(snapshot.reverse_p80) }} €</div>
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
@@ -177,6 +186,9 @@ function toggleDateInputs() {
                         <span class="{% if snapshot.sample_size >= 10 %}text-primary{% elif snapshot.sample_size >= 5 %}text-secondary{% else %}text-muted{% endif %}">
                             {{ snapshot.sample_size }}
                         </span>
+                        {% if snapshot.reverse_sample_size %}
+                        <div style="font-style: italic; color: var(--accent-blue);">{{ snapshot.reverse_sample_size }}</div>
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
@@ -195,6 +207,9 @@ function toggleDateInputs() {
                         <span class="{% if snapshot.age_median_days <= 14 %}text-primary{% elif snapshot.age_median_days <= 30 %}text-secondary{% else %}text-muted{% endif %}">
                             {{ snapshot.age_median_days|int }}j
                         </span>
+                        {% if snapshot.reverse_age_median_days %}
+                        <div style="font-style: italic; color: var(--accent-blue);">{{ snapshot.reverse_age_median_days|int }}j</div>
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
