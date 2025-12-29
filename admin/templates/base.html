@@ -114,6 +114,21 @@
             gap: 16px;
         }
 
+        .api-usage {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 4px 8px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+        }
+        .api-usage .api-count {
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
         .theme-toggle {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -578,6 +593,10 @@
                 <a href="{{ url_for('batch_launcher') }}">Lancer batch</a>
             </div>
             <div class="nav-right">
+                <div id="api-usage" class="api-usage" title="Appels API eBay aujourd'hui">
+                    <span class="api-count">-</span>
+                    <span class="api-label">API</span>
+                </div>
                 <button class="theme-toggle" onclick="toggleTheme()">
                     <span class="icon" id="theme-icon">🌙</span>
                     <span id="theme-label">Sombre</span>
@@ -617,6 +636,21 @@
 
         // Init
         setTheme(getTheme());
+
+        // API usage counter
+        function updateApiUsage() {
+            fetch('/api/usage/ebay')
+                .then(r => r.json())
+                .then(data => {
+                    const el = document.querySelector('#api-usage .api-count');
+                    if (el && data.calls_today !== undefined) {
+                        el.textContent = data.calls_today;
+                    }
+                })
+                .catch(() => {});
+        }
+        updateApiUsage();
+        setInterval(updateApiUsage, 30000);  // Refresh every 30s
     </script>
 
     <div class="container">

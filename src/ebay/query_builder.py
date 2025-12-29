@@ -78,14 +78,16 @@ class EbayQueryBuilder:
         """
         Corrige le padding du numero de carte si necessaire.
 
-        Si local_id commence par 0 (ex: "092"), le total doit aussi etre padde.
-        Ex: "092/94" -> "092/094"
-        """
-        if not local_id or not local_id.startswith("0"):
-            return card_number_full
+        Detecte la largeur du padding depuis le local_id:
+        - Si local_id commence par 0 (ex: "092"), utilise cette largeur
+        - Sinon, deduit la largeur depuis la longueur du local_id
+          (ex: pour un set 94 cartes avec local_id="102", le padding est 3)
 
-        # Determiner la largeur du padding depuis local_id
-        padding_width = len(local_id)
+        Ex: "092/94" -> "092/094"
+        Ex: "102/94" -> "102/094" (si le set utilise des numeros a 3 chiffres)
+        """
+        if not local_id:
+            return card_number_full
 
         # Parser le format "XXX/YYY"
         if "/" not in card_number_full:
@@ -97,6 +99,18 @@ class EbayQueryBuilder:
 
         num, total = parts
 
+        # Determiner la largeur du padding
+        # Si local_id commence par 0, utilise sa longueur
+        # Sinon, compare: si len(local_id) > len(total), c'est qu'il y a du padding
+        if local_id.startswith("0"):
+            padding_width = len(local_id)
+        elif len(num) > len(total):
+            # Le numero est plus long que le total -> padding manquant sur le total
+            padding_width = len(num)
+        else:
+            # Pas de padding necessaire
+            return card_number_full
+
         # Padder le total avec des zeros
         try:
             total_int = int(total)
@@ -107,11 +121,11 @@ class EbayQueryBuilder:
 
     def _clean_name(self, name: str) -> str:
         """Nettoie le nom de la carte."""
-        # Retirer les caracteres speciaux problematiques
+        # Retirer les guillemets doubles (problematiques pour eBay)
         name = name.replace('"', '')
-        name = name.replace("'", '')
+        # Garder les apostrophes (ex: "Double Suppression d'Énergie")
+        # Remplacer les tirets par des espaces
         name = name.replace("-", " ")
-        # Garder seulement les caracteres alphanumeriques et espaces
         return name.strip()
 
     def _truncate_query(self, query: str) -> str:

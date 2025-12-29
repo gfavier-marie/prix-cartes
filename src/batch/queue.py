@@ -181,7 +181,13 @@ class BatchQueue:
                 next_item.cards_targeted = stats.total_cards
                 next_item.cards_succeeded = stats.succeeded
                 next_item.cards_failed = stats.failed
-                next_item.status = QueueItemStatus.COMPLETED
+
+                # Marquer comme echoue si arrete pour echecs consecutifs
+                if stats.stopped_consecutive_failures:
+                    next_item.status = QueueItemStatus.FAILED
+                    next_item.error = "10 echecs consecutifs"
+                else:
+                    next_item.status = QueueItemStatus.COMPLETED
 
             except Exception as e:
                 next_item.status = QueueItemStatus.FAILED

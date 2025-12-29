@@ -163,35 +163,25 @@ class EbayWorker:
 
     def _normalize_prices(self, items: list[EbayItem]) -> list[float]:
         """
-        Normalise les prix en EUR.
+        Normalise les prix en EUR (hors frais de port).
 
-        - Prix effectif = prix + port
+        - Prix de base uniquement (sans port)
         - Conversion en EUR
         - Filtrage des valeurs invalides
         """
         prices = []
 
         for item in items:
-            # Prix de base
+            # Prix de base uniquement (hors port)
             price = item.price
             currency = item.currency
 
-            # Ajouter le port
-            if item.shipping_cost is not None:
-                # Si devise differente pour le port
-                if item.shipping_currency and item.shipping_currency != currency:
-                    shipping_eur = self._convert_to_eur(item.shipping_cost, item.shipping_currency)
-                    price_eur = self._convert_to_eur(price, currency)
-                    effective = price_eur + shipping_eur
-                else:
-                    effective = price + item.shipping_cost
-                    effective = self._convert_to_eur(effective, currency)
-            else:
-                effective = self._convert_to_eur(price, currency)
+            # Convertir en EUR
+            price_eur = self._convert_to_eur(price, currency)
 
             # Filtrer valeurs invalides
-            if effective > 0:
-                prices.append(effective)
+            if price_eur > 0:
+                prices.append(price_eur)
 
         return prices
 

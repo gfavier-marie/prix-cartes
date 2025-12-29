@@ -53,6 +53,7 @@ class BatchStats:
     mismatch_count: int = 0
     low_confidence_count: int = 0
     errors: list[tuple[int, str]] = field(default_factory=list)  # (card_id, error)
+    stopped_consecutive_failures: bool = False  # Arrete pour echecs consecutifs
 
 
 @dataclass
@@ -168,10 +169,10 @@ class BatchRunner:
                     console.print("[yellow]Batch interrompu par l'utilisateur[/yellow]")
                     break
 
-                # Verifier les echecs consecutifs
+                # Verifier les echecs consecutifs (arrete juste cette serie, pas toute la queue)
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    console.print(f"[red]Batch arrete: {MAX_CONSECUTIVE_FAILURES} echecs consecutifs[/red]")
-                    request_stop()
+                    console.print(f"[red]Serie arretee: {MAX_CONSECUTIVE_FAILURES} echecs consecutifs[/red]")
+                    stats.stopped_consecutive_failures = True
                     break
 
                 try:
@@ -360,12 +361,18 @@ class BatchRunner:
             f"Succeeded: {stats.succeeded}",
             f"Failed: {stats.failed}",
             f"Skipped (low value): {stats.skipped}",
+        ]
+
+        if stats.stopped_consecutive_failures:
+            lines.append("*** ARRETE: 10 echecs consecutifs ***")
+
+        lines.extend([
             "",
             f"High variations (>60%): {len(anomalies.high_variations)}",
             f"High dispersions: {len(anomalies.high_dispersions)}",
             f"Query issues: {len(anomalies.query_issues)}",
             f"Mismatches (fallback CM): {len(anomalies.mismatches)}",
-        ]
+        ])
 
         if stats.errors:
             lines.append("")
