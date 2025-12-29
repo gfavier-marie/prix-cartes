@@ -138,7 +138,7 @@ class EbayClient:
     # Mots a exclure dans les titres (lots, graded, etc.)
     TITLE_EXCLUSIONS_BASE = [
         # Lots et bundles
-        "lot ", "lots ", "bundle", "collection", "x10", "x20", "x50", "x100",
+        "bundle", "collection", "x10", "x20", "x50", "x100",
         # Cartes gradees (toutes les companies)
         "psa ", "psa-", "cgc ", "cgc-", "bgs ", "bgs-", "bcc ", "bcc-",
         "pca ", "pca-", "pcg ", "pcg-", "ace ", "ace-", "mga ", "mga-", "sgc ", "sgc-",
@@ -149,6 +149,11 @@ class EbayClient:
         "code card", "online code", "code online",
         # Autres langues
         "japanese", "japan", "jpn", "anglais", "english", "german", "italian",
+    ]
+
+    # Patterns regex pour mots complets (eviter faux positifs comme "Chamallot")
+    TITLE_EXCLUSIONS_REGEX = [
+        r"\blots?\b",  # "lot" ou "lots" comme mot complet
     ]
 
     # Exclusions pour cartes normales (exclure Edition 1)
@@ -267,7 +272,7 @@ class EbayClient:
         return result
 
     # Keywords pour identifier les cartes reverse
-    REVERSE_KEYWORDS = ["reverse", "rev ", " rev"]
+    REVERSE_KEYWORDS = ["reverse"]
 
     def _should_exclude_title(
         self,
@@ -296,6 +301,11 @@ class EbayClient:
         # Exclusions de base (lots, graded, etc.)
         for exclusion in self.TITLE_EXCLUSIONS_BASE:
             if exclusion in title_lower:
+                return True
+
+        # Exclusions regex (mots complets)
+        for pattern in self.TITLE_EXCLUSIONS_REGEX:
+            if re.search(pattern, title_lower):
                 return True
 
         if is_first_edition:

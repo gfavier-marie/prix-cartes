@@ -86,7 +86,7 @@ class EbayWorker:
         self._fx_rates = rates
 
     # Keywords pour identifier les cartes reverse (meme que dans client.py)
-    REVERSE_KEYWORDS = ["reverse", "rev ", " rev"]
+    REVERSE_KEYWORDS = ["reverse"]
 
     def _is_reverse_item(self, item: EbayItem) -> bool:
         """Verifie si un item est une carte reverse basé sur le titre."""
@@ -167,6 +167,13 @@ class EbayWorker:
                         )
             else:
                 result.items = search_result.items
+
+            # Si pas d'items normaux mais des reverse: on utilise les reverse comme items principaux
+            if not result.items and result.reverse_items:
+                result.items = result.reverse_items
+                result.reverse_items = []
+                result.reverse_stats = None
+                result.warnings.append("Uniquement des annonces reverse trouvees")
 
             if not result.items:
                 result.success = False
