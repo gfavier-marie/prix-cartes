@@ -137,10 +137,19 @@ class BatchRunner:
         batch_run: Optional[BatchRun] = None
 
         with get_session() as session:
+            # Recuperer le nom du set si set_id specifie
+            set_name = None
+            if set_id:
+                first_card = session.query(Card).filter(Card.set_id == set_id).first()
+                if first_card:
+                    set_name = first_card.set_name
+
             # Creer le batch run
             batch_run = BatchRun(
                 mode=mode,
                 started_at=datetime.utcnow(),
+                set_id=set_id,
+                set_name=set_name,
                 cards_succeeded=0,
                 cards_failed=0,
             )

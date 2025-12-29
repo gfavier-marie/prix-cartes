@@ -33,14 +33,18 @@ def get_sets_grouped_by_series():
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
+    # Séries à exclure (pas de cartes physiques)
+    EXCLUDED_SERIES = ['tcgp']  # Pokémon Pocket
+
     # Récupérer les séries triées par la plus ancienne date de set
     cursor.execute("""
         SELECT serie_id, serie_name, MIN(releasedate) as min_date
         FROM tcgdex_sets
         WHERE serie_id IS NOT NULL AND serie_name IS NOT NULL
+          AND serie_id NOT IN ({})
         GROUP BY serie_id
         ORDER BY min_date
-    """)
+    """.format(','.join('?' * len(EXCLUDED_SERIES))), EXCLUDED_SERIES)
     series = cursor.fetchall()
 
     result = []
@@ -378,11 +382,28 @@ def create_app() -> Flask:
                 .all()
             )
 
-            # Compter les cartes avec prix par set_id
+            # Compter les cartes avec donnees eBay (MarketSnapshot) par set_id
             price_counts = dict(
-                session.query(Card.set_id, func.count(BuyPrice.card_id))
-                .join(BuyPrice, Card.id == BuyPrice.card_id)
+                session.query(Card.set_id, func.count(func.distinct(Card.id)))
+                .join(MarketSnapshot, Card.id == MarketSnapshot.card_id)
                 .filter(Card.is_active == True)
+                .group_by(Card.set_id)
+                .all()
+            )
+
+            # Date du dernier snapshot par set_id
+            last_snapshot_dates = dict(
+                session.query(Card.set_id, func.max(MarketSnapshot.created_at))
+                .join(MarketSnapshot, Card.id == MarketSnapshot.card_id)
+                .filter(Card.is_active == True)
+                .group_by(Card.set_id)
+                .all()
+            )
+
+            # Compter les cartes avec erreur par set_id
+            error_counts = dict(
+                session.query(Card.set_id, func.count(Card.id))
+                .filter(Card.is_active == True, Card.last_error != None)
                 .group_by(Card.set_id)
                 .all()
             )
@@ -395,6 +416,8 @@ def create_app() -> Flask:
                 for s in serie['sets']:
                     s['card_count'] = card_counts.get(s['id'], 0)
                     s['price_count'] = price_counts.get(s['id'], 0)
+                    s['error_count'] = error_counts.get(s['id'], 0)
+                    s['last_snapshot'] = last_snapshot_dates.get(s['id'])
 
             # Verifier si un batch est en cours
             running_batch = session.query(BatchRun).filter(
@@ -423,20 +446,123 @@ def create_app() -> Flask:
         if not sets:
             return jsonify({"error": "sets ou set_id requis"}), 400
 
+        # Nombre de workers paralleles (1-10)
+        max_workers = data.get("max_workers", 1)
+        max_workers = max(1, min(int(max_workers), 10))
+
         queue = get_queue()
-        items = queue.add_multiple(sets)
+        items = queue.add_multiple(sets, max_workers=max_workers)
 
         return jsonify({
             "success": True,
-            "message": f"{len(items)} set(s) ajoute(s) a la queue",
+            "message": f"{len(items)} set(s) ajoute(s) a la queue ({max_workers} workers)",
             "queue_status": queue.get_status(),
         })
+
+    @app.route("/api/batch/estimate", methods=["POST"])
+    def api_batch_estimate():
+        """API: Estimer le nombre d'appels API pour une liste de sets."""
+        from sqlalchemy import func
+
+        data = request.get_json() or {}
+        set_ids = data.get("set_ids", [])
+
+        if not set_ids:
+            return jsonify({"error": "set_ids requis"}), 400
+
+        with get_session() as session:
+            # Compter les cartes par set
+            card_counts = dict(
+                session.query(Card.set_id, func.count(Card.id))
+                .filter(Card.is_active == True, Card.set_id.in_(set_ids))
+                .group_by(Card.set_id)
+                .all()
+            )
+
+            # Total cartes
+            total_cards = sum(card_counts.values())
+
+            # Estimation: ~1 appel API par carte
+            estimated_calls = total_cards
+
+            # Recuperer l'usage actuel
+            usage = get_ebay_usage_summary(session)
+            remaining = usage.get("remaining", 5000)
+
+            return jsonify({
+                "set_count": len(set_ids),
+                "total_cards": total_cards,
+                "estimated_calls": estimated_calls,
+                "today_usage": usage.get("today_count", 0),
+                "daily_limit": usage.get("daily_limit", 5000),
+                "remaining": remaining,
+                "will_exceed": estimated_calls > remaining,
+            })
 
     @app.route("/api/batch/status")
     def api_batch_status():
         """API: Statut de la queue de batchs."""
         queue = get_queue()
         return jsonify(queue.get_status())
+
+    @app.route("/api/batch/set-stats")
+    def api_batch_set_stats():
+        """API: Retourne les compteurs cartes/donnees eBay par set."""
+        from sqlalchemy import func
+
+        with get_session() as session:
+            # Compter les cartes par set_id
+            card_counts = dict(
+                session.query(Card.set_id, func.count(Card.id))
+                .filter(Card.is_active == True)
+                .group_by(Card.set_id)
+                .all()
+            )
+
+            # Compter les cartes avec donnees eBay (MarketSnapshot) par set_id
+            data_counts = dict(
+                session.query(Card.set_id, func.count(func.distinct(Card.id)))
+                .join(MarketSnapshot, Card.id == MarketSnapshot.card_id)
+                .filter(Card.is_active == True)
+                .group_by(Card.set_id)
+                .all()
+            )
+
+            # Date du dernier snapshot par set_id
+            last_snapshot_dates = dict(
+                session.query(Card.set_id, func.max(MarketSnapshot.created_at))
+                .join(MarketSnapshot, Card.id == MarketSnapshot.card_id)
+                .filter(Card.is_active == True)
+                .group_by(Card.set_id)
+                .all()
+            )
+
+            # Compter les cartes avec erreur par set_id
+            error_counts = dict(
+                session.query(Card.set_id, func.count(Card.id))
+                .filter(Card.is_active == True, Card.last_error != None)
+                .group_by(Card.set_id)
+                .all()
+            )
+
+            # Construire la reponse
+            stats = {}
+            for set_id, card_count in card_counts.items():
+                data_count = data_counts.get(set_id, 0)
+                error_count = error_counts.get(set_id, 0)
+                pct = round(data_count / card_count * 100) if card_count > 0 else 0
+                error_pct = round(error_count / card_count * 100) if card_count > 0 else 0
+                last_date = last_snapshot_dates.get(set_id)
+                stats[set_id] = {
+                    "card_count": card_count,
+                    "price_count": data_count,
+                    "error_count": error_count,
+                    "pct": pct,
+                    "error_pct": error_pct,
+                    "last_snapshot": last_date.strftime('%d/%m/%y') if last_date else None,
+                }
+
+            return jsonify(stats)
 
     @app.route("/api/batch/stop", methods=["POST"])
     def api_batch_stop():

@@ -49,7 +49,12 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if batch_details.get(batch.id) %}
+                    {% if batch.set_name %}
+                        <div>
+                            <strong style="color: var(--text-primary);">{{ batch.set_name }}</strong>
+                            <div class="mono text-secondary" style="font-size: 11px;">{{ batch.set_id }}</div>
+                        </div>
+                    {% elif batch_details.get(batch.id) %}
                         <div>
                             <strong style="color: var(--text-primary);">{{ batch_details[batch.id]|length }} set{% if batch_details[batch.id]|length > 1 %}s{% endif %}</strong>
                             <div class="batch-set-details" style="padding: 8px 0; font-size: 12px; max-height: 200px; overflow-y: auto;">

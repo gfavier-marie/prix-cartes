@@ -3,9 +3,12 @@
 {% block title %}Lancer batch{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Lancer un batch</h1>
-    <p>Selectionnez une ou plusieurs series pour lancer la collecte des donnees</p>
+<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+        <h1>Lancer un batch</h1>
+        <p>Selectionnez une ou plusieurs series pour lancer la collecte des donnees</p>
+    </div>
+    <button id="refresh-stats-btn" class="btn btn-ghost" onclick="refreshStats()">Actualiser</button>
 </div>
 
 <!-- Auto-launch button -->
@@ -20,6 +23,13 @@
             <option value="10" selected>10 sets</option>
             <option value="20">20 sets</option>
             <option value="50">50 sets</option>
+        </select>
+        <select id="auto-workers" style="padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-secondary);">
+            <option value="1">1 worker</option>
+            <option value="2">2 workers</option>
+            <option value="3" selected>3 workers</option>
+            <option value="5">5 workers</option>
+            <option value="10">10 workers</option>
         </select>
         <button id="auto-launch-btn" class="btn btn-primary">Lancer auto</button>
     </div>
@@ -41,9 +51,19 @@
 
 <!-- Selection bar -->
 <div id="selection-bar" class="card" style="display: none; position: sticky; top: 0; z-index: 100; background: var(--bg-primary);">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span><strong id="selection-count">0</strong> set(s) selectionne(s)</span>
-        <div style="display: flex; gap: 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+            <strong id="selection-count">0</strong> set(s) selectionne(s)
+            <span id="estimate-info" class="text-secondary" style="margin-left: 12px; font-size: 13px;"></span>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <select id="selection-workers" style="padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-secondary);">
+                <option value="1">1 worker</option>
+                <option value="2">2 workers</option>
+                <option value="3" selected>3 workers</option>
+                <option value="5">5 workers</option>
+                <option value="10">10 workers</option>
+            </select>
             <button id="clear-selection-btn" class="btn btn-ghost btn-sm">Effacer</button>
             <button id="launch-queue-btn" class="btn btn-primary">Lancer la queue</button>
         </div>
@@ -69,9 +89,7 @@
                 <tr>
                     <th style="width: 40px;"></th>
                     <th>Set</th>
-                    <th>Date</th>
-                    <th class="text-right">Cartes</th>
-                    <th class="text-right">Avec donnees</th>
+                    <th>Dernier maj</th>
                     <th class="text-right">Progression</th>
                 </tr>
             </thead>
@@ -85,18 +103,21 @@
                         <div class="card-name">{{ set.name }}</div>
                         <div class="card-meta mono">{{ set.id }}</div>
                     </td>
-                    <td>{{ set.date or '-' }}</td>
-                    <td class="text-right">{{ set.card_count }}</td>
-                    <td class="text-right">{{ set.price_count }}</td>
-                    <td class="text-right">
+                    <td class="set-last-snapshot" data-set-id="{{ set.id }}">{{ set.last_snapshot.strftime('%d/%m/%y') if set.last_snapshot else '-' }}</td>
+                    <td class="text-right set-progress" data-set-id="{{ set.id }}">
                         {% if set.card_count > 0 %}
                             {% set pct = (set.price_count / set.card_count * 100)|round(0)|int %}
+                            {% set error_pct = (set.error_count / set.card_count * 100)|round(0)|int if set.error_count else 0 %}
                             <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                                <span class="mono set-counts">{{ set.price_count }}/{{ set.card_count }}</span>
                                 <div style="width: 60px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
-                                    <div style="width: {{ pct }}%; height: 100%; background: {{ 'var(--accent-green)' if pct == 100 else 'var(--accent-blue)' }};"></div>
+                                    <div class="set-bar" style="width: {{ pct }}%; height: 100%; background: {{ 'var(--accent-green)' if pct == 100 else 'var(--accent-blue)' }};"></div>
                                 </div>
-                                <span class="mono" style="width: 40px;">{{ pct }}%</span>
+                                <span class="mono set-pct" style="width: 40px;">{{ pct }}%</span>
                             </div>
+                            {% if set.error_count > 0 %}
+                            <div class="set-errors" style="font-size: 11px; color: var(--accent-red); margin-top: 2px;">{{ set.error_count }} err ({{ error_pct }}%)</div>
+                            {% endif %}
                         {% else %}
                             -
                         {% endif %}
@@ -159,6 +180,7 @@
 
 <script>
     const selectedSets = new Set();
+    let estimateTimeout = null;
 
     function toggleSerie(serieId) {
         const container = document.getElementById('sets-' + serieId);
@@ -202,6 +224,41 @@
 
         count.textContent = selectedSets.size;
         bar.style.display = selectedSets.size > 0 ? 'block' : 'none';
+
+        // Debounce: mettre a jour l'estimation
+        if (estimateTimeout) clearTimeout(estimateTimeout);
+        if (selectedSets.size > 0) {
+            estimateTimeout = setTimeout(updateEstimate, 300);
+        } else {
+            document.getElementById('estimate-info').textContent = '';
+        }
+    }
+
+    async function updateEstimate() {
+        const setIds = Array.from(selectedSets).map(s => JSON.parse(s).set_id);
+        if (setIds.length === 0) return;
+
+        try {
+            const response = await fetch('/api/batch/estimate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ set_ids: setIds })
+            });
+            const data = await response.json();
+
+            const estimateEl = document.getElementById('estimate-info');
+            const willExceed = data.will_exceed;
+            const color = willExceed ? 'var(--accent-red)' : 'var(--text-secondary)';
+
+            estimateEl.innerHTML = `
+                ~<strong>${data.total_cards}</strong> cartes
+                / <strong style="color: ${color}">${data.estimated_calls}</strong> appels API
+                (reste: ${data.remaining} / ${data.daily_limit})
+                ${willExceed ? '<span style="color: var(--accent-red);"> Depassera le quota!</span>' : ''}
+            `;
+        } catch (e) {
+            console.error('Erreur estimation:', e);
+        }
     }
 
     // Checkbox event listeners
@@ -223,6 +280,7 @@
         if (selectedSets.size === 0) return;
 
         const sets = Array.from(selectedSets).map(s => JSON.parse(s));
+        const maxWorkers = parseInt(document.getElementById('selection-workers').value);
 
         this.disabled = true;
         this.textContent = 'Ajout...';
@@ -233,7 +291,7 @@
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ sets })
+                body: JSON.stringify({ sets, max_workers: maxWorkers })
             });
 
             const data = await response.json();
@@ -291,27 +349,36 @@
                 hasStartedProcessing = true;  // Mark that processing has started
                 showQueueStatus();
 
-                // Current batch
                 let html = '';
 
-                if (data.current) {
-                    const c = data.current;
-                    const pct = c.cards_targeted > 0 ? Math.round((c.cards_succeeded + c.cards_failed) / c.cards_targeted * 100) : 0;
-                    html += `
-                        <div class="queue-item running">
-                            <div>
-                                <strong>${c.set_name}</strong>
-                                <span class="text-secondary">(${c.set_id})</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 12px;">
-                                <span>${c.cards_succeeded}/${c.cards_targeted}</span>
-                                <div style="width: 80px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
-                                    <div style="width: ${pct}%; height: 100%; background: var(--accent-blue);"></div>
+                // Running items (plusieurs possibles avec workers paralleles)
+                if (data.running_items && data.running_items.length > 0) {
+                    const workersInfo = data.max_workers > 1 ? ` (${data.running_count}/${data.max_workers} workers)` : '';
+                    html += `<p style="margin: 0 0 8px; color: var(--text-secondary);">En cours${workersInfo}:</p>`;
+
+                    data.running_items.forEach(c => {
+                        const pct = c.cards_targeted > 0 ? Math.round((c.cards_succeeded + c.cards_failed) / c.cards_targeted * 100) : 0;
+                        html += `
+                            <div class="queue-item running">
+                                <div>
+                                    <strong>${c.set_name}</strong>
+                                    <span class="text-secondary">(${c.set_id})</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <span>${c.cards_succeeded}/${c.cards_targeted}</span>
+                                    <div style="width: 80px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
+                                        <div style="width: ${pct}%; height: 100%; background: var(--accent-blue);"></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    `;
-                    badge.textContent = `En cours (${pct}%)`;
+                        `;
+                    });
+
+                    // Calculate overall progress
+                    const totalTargeted = data.running_items.reduce((sum, c) => sum + c.cards_targeted, 0);
+                    const totalDone = data.running_items.reduce((sum, c) => sum + c.cards_succeeded + c.cards_failed, 0);
+                    const overallPct = totalTargeted > 0 ? Math.round(totalDone / totalTargeted * 100) : 0;
+                    badge.textContent = `En cours (${data.running_count}/${data.max_workers})`;
                 }
 
                 // Pending
@@ -406,9 +473,60 @@
             }
         });
 
+    // Refresh stats
+    async function refreshStats() {
+        const btn = document.getElementById('refresh-stats-btn');
+        btn.disabled = true;
+        btn.textContent = 'Chargement...';
+
+        try {
+            const response = await fetch('/api/batch/set-stats');
+            const stats = await response.json();
+
+            // Update progress cells
+            document.querySelectorAll('.set-progress').forEach(cell => {
+                const setId = cell.dataset.setId;
+                const data = stats[setId];
+
+                if (data && data.card_count > 0) {
+                    const barColor = data.pct === 100 ? 'var(--accent-green)' : 'var(--accent-blue)';
+                    let errorsHtml = '';
+                    if (data.error_count > 0) {
+                        errorsHtml = `<div class="set-errors" style="font-size: 11px; color: var(--accent-red); margin-top: 2px;">${data.error_count} err (${data.error_pct}%)</div>`;
+                    }
+                    cell.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
+                            <span class="mono set-counts">${data.price_count}/${data.card_count}</span>
+                            <div style="width: 60px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
+                                <div class="set-bar" style="width: ${data.pct}%; height: 100%; background: ${barColor};"></div>
+                            </div>
+                            <span class="mono set-pct" style="width: 40px;">${data.pct}%</span>
+                        </div>
+                        ${errorsHtml}
+                    `;
+                } else if (data) {
+                    cell.textContent = '-';
+                }
+            });
+
+            // Update last snapshot date cells
+            document.querySelectorAll('.set-last-snapshot').forEach(cell => {
+                const setId = cell.dataset.setId;
+                const data = stats[setId];
+                cell.textContent = data && data.last_snapshot ? data.last_snapshot : '-';
+            });
+        } catch (e) {
+            console.error('Erreur refresh:', e);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Actualiser';
+        }
+    }
+
     // Auto-launch button
     document.getElementById('auto-launch-btn').addEventListener('click', async function() {
         const limit = document.getElementById('auto-limit').value;
+        const maxWorkers = parseInt(document.getElementById('auto-workers').value);
 
         this.disabled = true;
         this.textContent = 'Chargement...';
@@ -429,13 +547,13 @@
                 set_name: s.set_name
             }));
 
-            // Launch batch
+            // Launch batch with max_workers
             const response = await fetch('/api/batch/run', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ sets })
+                body: JSON.stringify({ sets, max_workers: maxWorkers })
             });
 
             const data = await response.json();

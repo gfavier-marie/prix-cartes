@@ -286,6 +286,10 @@ class BatchRun(Base):
 
     mode = Column(Enum(BatchMode), nullable=False)
 
+    # Set cible (optionnel, pour batchs par set)
+    set_id = Column(String(50), nullable=True, index=True)
+    set_name = Column(String(200), nullable=True)
+
     # Stats
     cards_targeted = Column(Integer, default=0)
     cards_succeeded = Column(Integer, default=0)

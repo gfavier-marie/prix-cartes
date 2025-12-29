@@ -1,8 +1,9 @@
 """
-Queue de batchs pour execution sequentielle.
+Queue de batchs pour execution parallele.
 """
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Callable
@@ -34,7 +35,7 @@ class QueueItem:
 
 class BatchQueue:
     """
-    Queue de batchs avec execution sequentielle.
+    Queue de batchs avec execution parallele.
 
     Singleton partage entre threads.
     """
@@ -55,28 +56,41 @@ class BatchQueue:
             return
 
         self._queue: list[QueueItem] = []
-        self._current: Optional[QueueItem] = None
-        self._worker_thread: Optional[threading.Thread] = None
+        self._running: list[QueueItem] = []  # Items en cours de traitement
+        self._executor: Optional[ThreadPoolExecutor] = None
+        self._max_workers: int = 1
         self._stop_requested = threading.Event()
+        self._queue_lock = threading.Lock()
         self._initialized = True
+
+    def set_max_workers(self, max_workers: int) -> None:
+        """Definit le nombre max de workers paralleles."""
+        self._max_workers = max(1, min(max_workers, 10))  # Entre 1 et 10
+
+    @property
+    def max_workers(self) -> int:
+        """Retourne le nombre max de workers."""
+        return self._max_workers
 
     def add(self, set_id: str, set_name: str) -> QueueItem:
         """Ajoute un set a la queue."""
-        # Verifier si deja dans la queue
-        for item in self._queue:
-            if item.set_id == set_id and item.status == QueueItemStatus.PENDING:
-                return item  # Deja en attente
+        with self._queue_lock:
+            # Verifier si deja dans la queue
+            for item in self._queue:
+                if item.set_id == set_id and item.status == QueueItemStatus.PENDING:
+                    return item  # Deja en attente
 
-        item = QueueItem(set_id=set_id, set_name=set_name)
-        self._queue.append(item)
+            item = QueueItem(set_id=set_id, set_name=set_name)
+            self._queue.append(item)
 
-        # Demarrer le worker si pas deja en cours
-        self._ensure_worker_running()
+        # Demarrer les workers si pas deja en cours
+        self._ensure_workers_running()
 
         return item
 
-    def add_multiple(self, sets: list[dict]) -> list[QueueItem]:
-        """Ajoute plusieurs sets a la queue."""
+    def add_multiple(self, sets: list[dict], max_workers: int = 1) -> list[QueueItem]:
+        """Ajoute plusieurs sets a la queue avec nombre de workers."""
+        self.set_max_workers(max_workers)
         items = []
         for s in sets:
             item = self.add(s["set_id"], s["set_name"])
@@ -85,13 +99,17 @@ class BatchQueue:
 
     def get_status(self) -> dict:
         """Retourne le statut de la queue."""
-        pending = [i for i in self._queue if i.status == QueueItemStatus.PENDING]
-        completed = [i for i in self._queue if i.status == QueueItemStatus.COMPLETED]
-        failed = [i for i in self._queue if i.status == QueueItemStatus.FAILED]
+        with self._queue_lock:
+            pending = [i for i in self._queue if i.status == QueueItemStatus.PENDING]
+            running = [i for i in self._queue if i.status == QueueItemStatus.RUNNING]
+            completed = [i for i in self._queue if i.status == QueueItemStatus.COMPLETED]
+            failed = [i for i in self._queue if i.status == QueueItemStatus.FAILED]
 
         return {
-            "running": self._current is not None,
-            "current": self._format_item(self._current) if self._current else None,
+            "running": len(running) > 0,
+            "running_items": [self._format_item(i) for i in running],
+            "running_count": len(running),
+            "max_workers": self._max_workers,
             "pending": [self._format_item(i) for i in pending],
             "pending_count": len(pending),
             "completed_count": len(completed),
@@ -121,87 +139,114 @@ class BatchQueue:
         from .runner import request_stop
         request_stop()
 
+        # Shutdown executor
+        if self._executor:
+            self._executor.shutdown(wait=False)
+            self._executor = None
+
     def clear_pending(self):
         """Supprime les items en attente."""
-        self._queue = [i for i in self._queue if i.status != QueueItemStatus.PENDING]
+        with self._queue_lock:
+            self._queue = [i for i in self._queue if i.status != QueueItemStatus.PENDING]
 
     def clear_completed(self):
         """Supprime les items termines de la liste."""
-        self._queue = [i for i in self._queue
-                       if i.status not in (QueueItemStatus.COMPLETED, QueueItemStatus.FAILED, QueueItemStatus.CANCELLED)]
+        with self._queue_lock:
+            self._queue = [i for i in self._queue
+                           if i.status not in (QueueItemStatus.COMPLETED, QueueItemStatus.FAILED, QueueItemStatus.CANCELLED)]
 
-    def _ensure_worker_running(self):
-        """Demarre le worker s'il n'est pas deja actif."""
-        if self._worker_thread is not None and self._worker_thread.is_alive():
+    def _ensure_workers_running(self):
+        """Demarre le pool de workers s'il n'est pas deja actif."""
+        if self._executor is not None:
             return
 
         self._stop_requested.clear()
-        self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
-        self._worker_thread.start()
+        self._executor = ThreadPoolExecutor(max_workers=self._max_workers)
 
-    def _worker_loop(self):
-        """Boucle principale du worker."""
-        from .runner import BatchRunner, clear_stop
-        from ..models import BatchMode
+        # Lancer le dispatcher dans un thread separe
+        dispatcher_thread = threading.Thread(target=self._dispatcher_loop, daemon=True)
+        dispatcher_thread.start()
+
+    def _dispatcher_loop(self):
+        """Dispatcher qui soumet les items aux workers."""
+        import time
 
         while not self._stop_requested.is_set():
-            # Trouver le prochain item en attente
-            next_item = None
-            for item in self._queue:
-                if item.status == QueueItemStatus.PENDING:
-                    next_item = item
-                    break
+            # Compter les items en cours
+            with self._queue_lock:
+                running_count = sum(1 for i in self._queue if i.status == QueueItemStatus.RUNNING)
+                pending_items = [i for i in self._queue if i.status == QueueItemStatus.PENDING]
 
-            if next_item is None:
-                # Plus rien a traiter
+            # Si on peut lancer plus de workers
+            slots_available = self._max_workers - running_count
+
+            if slots_available > 0 and pending_items:
+                # Lancer autant de workers que possible
+                for item in pending_items[:slots_available]:
+                    with self._queue_lock:
+                        if item.status == QueueItemStatus.PENDING:
+                            item.status = QueueItemStatus.RUNNING
+                            item.started_at = datetime.utcnow()
+                            self._executor.submit(self._process_item, item)
+
+            # Verifier si tout est termine
+            with self._queue_lock:
+                has_work = any(i.status in (QueueItemStatus.PENDING, QueueItemStatus.RUNNING) for i in self._queue)
+
+            if not has_work:
                 break
 
-            # Traiter cet item
-            self._current = next_item
-            next_item.status = QueueItemStatus.RUNNING
-            next_item.started_at = datetime.utcnow()
+            # Attendre un peu avant de recheck
+            time.sleep(0.5)
 
-            try:
-                # Reinitialiser le flag d'arret pour ce batch
-                clear_stop()
-
-                # Callback pour mettre a jour la progression en temps reel
-                def progress_callback(processed: int, total: int, succeeded: int = 0, failed: int = 0):
-                    next_item.cards_targeted = total
-                    next_item.cards_succeeded = succeeded
-                    next_item.cards_failed = failed
-
-                runner = BatchRunner()
-                stats, _ = runner.run(
-                    mode=BatchMode.FULL_EBAY,
-                    set_id=next_item.set_id,
-                    progress_callback=progress_callback,
-                )
-
-                next_item.cards_targeted = stats.total_cards
-                next_item.cards_succeeded = stats.succeeded
-                next_item.cards_failed = stats.failed
-
-                # Marquer comme echoue si arrete pour echecs consecutifs
-                if stats.stopped_consecutive_failures:
-                    next_item.status = QueueItemStatus.FAILED
-                    next_item.error = "10 echecs consecutifs"
-                else:
-                    next_item.status = QueueItemStatus.COMPLETED
-
-            except Exception as e:
-                next_item.status = QueueItemStatus.FAILED
-                next_item.error = str(e)
-
-            finally:
-                next_item.finished_at = datetime.utcnow()
-                self._current = None
+        # Cleanup executor
+        if self._executor:
+            self._executor.shutdown(wait=True)
+            self._executor = None
 
         # Marquer les items restants comme annules si arret demande
         if self._stop_requested.is_set():
-            for item in self._queue:
-                if item.status == QueueItemStatus.PENDING:
-                    item.status = QueueItemStatus.CANCELLED
+            with self._queue_lock:
+                for item in self._queue:
+                    if item.status == QueueItemStatus.PENDING:
+                        item.status = QueueItemStatus.CANCELLED
+
+    def _process_item(self, item: QueueItem):
+        """Traite un item dans un thread du pool."""
+        from .runner import BatchRunner
+        from ..models import BatchMode
+
+        try:
+            # Callback pour mettre a jour la progression en temps reel
+            def progress_callback(processed: int, total: int, succeeded: int = 0, failed: int = 0):
+                item.cards_targeted = total
+                item.cards_succeeded = succeeded
+                item.cards_failed = failed
+
+            runner = BatchRunner()
+            stats, _ = runner.run(
+                mode=BatchMode.FULL_EBAY,
+                set_id=item.set_id,
+                progress_callback=progress_callback,
+            )
+
+            item.cards_targeted = stats.total_cards
+            item.cards_succeeded = stats.succeeded
+            item.cards_failed = stats.failed
+
+            # Marquer comme echoue si arrete pour echecs consecutifs
+            if stats.stopped_consecutive_failures:
+                item.status = QueueItemStatus.FAILED
+                item.error = "10 echecs consecutifs"
+            else:
+                item.status = QueueItemStatus.COMPLETED
+
+        except Exception as e:
+            item.status = QueueItemStatus.FAILED
+            item.error = str(e)
+
+        finally:
+            item.finished_at = datetime.utcnow()
 
 
 # Instance globale
