@@ -51,25 +51,29 @@ class EbayQueryBuilder:
         parts.append(name)
 
         # 2. Numero complet (1/102) ou juste le numero
-        # Utilise effective_local_id pour les overrides
+        # Utilise effective_local_id et effective_card_number_full pour les overrides
         effective_local_id = card.effective_local_id
+        effective_card_number_full = card.effective_card_number_full
         # Pour les sets promo, utiliser juste le numero + "promo" (pas de /XXX sur les cartes physiques)
         if card.set_id in self.PROMO_SETS:
             if effective_local_id:
                 parts.append(effective_local_id)
             parts.append("promo")
-        elif card.card_number_full:
-            # Corriger le padding si local_id commence par 0 (sets modernes)
-            # Si override du local_id, reconstruire le card_number_full
-            if card.local_id_override:
-                # Reconstruire le numero complet avec l'override
-                total_part = card.card_number_full.split("/")[-1] if "/" in card.card_number_full else ""
+        elif effective_card_number_full:
+            # Utiliser directement effective_card_number_full (qui gere les overrides)
+            # Corriger le padding si besoin
+            if card.card_number_full_override:
+                # Override defini, utiliser tel quel
+                card_number = effective_card_number_full
+            elif card.local_id_override:
+                # Reconstruire le numero complet avec l'override du local_id
+                total_part = effective_card_number_full.split("/")[-1] if "/" in effective_card_number_full else ""
                 if total_part:
                     card_number = f"{effective_local_id}/{total_part}"
                 else:
                     card_number = effective_local_id
             else:
-                card_number = self._fix_card_number_padding(card.card_number_full, card.local_id)
+                card_number = self._fix_card_number_padding(effective_card_number_full, card.local_id)
             parts.append(card_number)
         elif effective_local_id:
             parts.append(effective_local_id)

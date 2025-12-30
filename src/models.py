@@ -112,6 +112,7 @@ class Card(Base):
     name_override = Column(String(200), nullable=True)
     local_id_override = Column(String(20), nullable=True)
     set_name_override = Column(String(200), nullable=True)
+    card_number_full_override = Column(String(20), nullable=True)  # ex: "H01/H32"
 
     # Prix Cardmarket (via TCGdex)
     cm_trend = Column(Float, nullable=True)
@@ -175,9 +176,14 @@ class Card(Base):
         return self.set_name_override or self.set_name
 
     @property
+    def effective_card_number_full(self) -> Optional[str]:
+        """Retourne le numero complet override s'il existe, sinon le numero TCGdex."""
+        return self.card_number_full_override or self.card_number_full
+
+    @property
     def has_overrides(self) -> bool:
         """Retourne True si au moins un override est defini."""
-        return bool(self.name_override or self.local_id_override or self.set_name_override)
+        return bool(self.name_override or self.local_id_override or self.set_name_override or self.card_number_full_override)
 
     def __repr__(self) -> str:
         return f"<Card {self.tcgdex_id}: {self.name} ({self.variant.value})>"

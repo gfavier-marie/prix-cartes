@@ -1281,6 +1281,22 @@ def create_app() -> Flask:
                                 card.ebay_query_override = new_ebay_query
                                 updated_fields.append('ebay_query')
 
+                            # Gestion du set_cardcount_official ou set_id (construit card_number_full_override)
+                            # En mode modification, set_id peut etre utilise pour le total du set
+                            set_cardcount = None
+                            if 'set_cardcount_official' in row and row['set_cardcount_official'].strip():
+                                set_cardcount = row['set_cardcount_official'].strip()
+                            elif 'set_id' in row and row['set_id'].strip():
+                                # En mode modification, set_id = total du set (ex: H32)
+                                set_cardcount = row['set_id'].strip()
+
+                            if set_cardcount:
+                                # Utiliser local_id_override si defini dans cette ligne ou sur la carte
+                                # sinon utiliser local_id original
+                                effective_local = row.get('local_id', '').strip() or card.local_id_override or card.local_id
+                                card.card_number_full_override = f"{effective_local}/{set_cardcount}"
+                                updated_fields.append('card_number_full')
+
                             if updated_fields:
                                 # Regenerer la requete eBay seulement si pas d'override
                                 if 'ebay_query' not in updated_fields:
