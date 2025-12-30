@@ -733,6 +733,72 @@ def create_app() -> Flask:
             return jsonify({"success": True, **rate_limits})
         return jsonify({"success": False, "error": "Impossible de recuperer les rate limits"}), 500
 
+    @app.route("/api/cards/<int:card_id>/update-info", methods=["POST"])
+    def api_card_update_info(card_id: int):
+        """API: Mettre a jour les overrides d'informations d'une carte."""
+        data = request.get_json() or {}
+
+        with get_session() as session:
+            card = session.query(Card).filter(Card.id == card_id).first()
+            if not card:
+                return jsonify({"success": False, "error": "Carte non trouvee"}), 404
+
+            # Mettre a jour les overrides (null = pas d'override)
+            card.name_override = data.get("name_override") or None
+            card.local_id_override = data.get("local_id_override") or None
+            card.set_name_override = data.get("set_name_override") or None
+            card.updated_at = datetime.utcnow()
+
+            # Regenerer la requete eBay avec les nouvelles valeurs
+            builder = EbayQueryBuilder()
+            new_query = builder.build_query(card)
+            card.ebay_query = new_query
+
+            session.commit()
+
+            return jsonify({
+                "success": True,
+                "message": "Overrides mis a jour et requete eBay regeneree",
+                "card": {
+                    "id": card.id,
+                    "name_override": card.name_override,
+                    "local_id_override": card.local_id_override,
+                    "set_name_override": card.set_name_override,
+                    "effective_name": card.effective_name,
+                    "effective_local_id": card.effective_local_id,
+                    "effective_set_name": card.effective_set_name,
+                    "ebay_query": card.ebay_query,
+                }
+            })
+
+    @app.route("/api/cards/regenerate-queries", methods=["POST"])
+    def api_regenerate_all_queries():
+        """API: Regenerer toutes les requetes eBay pour toutes les cartes actives."""
+        with get_session() as session:
+            builder = EbayQueryBuilder()
+
+            # Recuperer toutes les cartes actives sans override de requete
+            cards = session.query(Card).filter(
+                Card.is_active == True,
+                Card.ebay_query_override == None
+            ).all()
+
+            count = 0
+            for card in cards:
+                new_query = builder.build_query(card)
+                if card.ebay_query != new_query:
+                    card.ebay_query = new_query
+                    count += 1
+
+            session.commit()
+
+            return jsonify({
+                "success": True,
+                "message": f"{count} requetes eBay regenerees",
+                "total_cards": len(cards),
+                "updated": count
+            })
+
     @app.route("/api/cards/<int:card_id>")
     def api_card(card_id: int):
         """API: detail carte en JSON."""
@@ -876,13 +942,17 @@ def create_app() -> Flask:
 
     @app.route("/export/csv")
     def export_csv():
-        """Export CSV de toutes les cartes avec statistiques eBay."""
+        """Export CSV de toutes les cartes avec statistiques eBay et ventes."""
         from sqlalchemy import func
+        from collections import defaultdict
+        from datetime import timedelta
+        import numpy as np
 
         output = io.StringIO()
         writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
 
-        # Header - stats eBay uniquement
+        # Header - stats eBay + ventes
+        # Note: percentiles affiches seulement si >= 10 elements (sinon vide = stats non fiables)
         writer.writerow([
             'ID',
             'TCGdex ID',
@@ -890,7 +960,11 @@ def create_app() -> Flask:
             'Set',
             'Numéro',
             'Variant',
+            # Stats annonces en cours (min/max/moy toujours, percentiles si >= 10)
             'Nb Annonces',
+            'Min',
+            'Max',
+            'Moy',
             'p10',
             'p20',
             'p50',
@@ -902,9 +976,42 @@ def create_app() -> Flask:
             '% Recentes 7j',
             'Consensus %',
             'Date Snapshot',
+            # Stats ventes (min/max/moy toujours, percentiles si >= 10)
+            'Ventes Nb',
+            'Ventes Min',
+            'Ventes Max',
+            'Ventes Moy',
+            'Ventes p10',
+            'Ventes p20',
+            'Ventes p50',
+            'Ventes p80',
+            'Ventes p90',
+            'Ventes Dispersion',
+            'Ventes CV',
+            'Ventes % 7j',
+            'Derniere Vente',
         ])
 
         with get_session() as session:
+            now = datetime.utcnow()
+            seven_days_ago = now - timedelta(days=7)
+
+            # Precharger les stats de ventes par card_id
+            sales_by_card = defaultdict(lambda: {
+                "prices": [],
+                "dates": [],
+                "last_date": None
+            })
+
+            for sold in session.query(SoldListing).all():
+                s = sales_by_card[sold.card_id]
+                price = sold.effective_price or 0
+                s["prices"].append(price)
+                if sold.detected_sold_at:
+                    s["dates"].append(sold.detected_sold_at)
+                if s["last_date"] is None or (sold.detected_sold_at and sold.detected_sold_at > s["last_date"]):
+                    s["last_date"] = sold.detected_sold_at
+
             # Subquery pour l'ID du snapshot le plus récent par carte
             latest_snapshot_id = session.query(
                 MarketSnapshot.card_id,
@@ -920,25 +1027,108 @@ def create_app() -> Flask:
             ).filter(Card.is_active == True).order_by(Card.set_name, Card.local_id).all()
 
             for card, snapshot in results:
+                # Stats ventes pour cette carte
+                s = sales_by_card.get(card.id, {"prices": [], "dates": [], "last_date": None})
+                prices = s["prices"]
+                dates = s["dates"]
+
+                # Calculer les stats des ventes
+                v_count = len(prices)
+                v_min = v_max = v_moy = ''
+                v_p10 = v_p20 = v_p50 = v_p80 = v_p90 = v_disp = v_cv = v_pct_7d = ''
+                if prices:
+                    prices_arr = np.array(prices)
+                    # Min/max/moy toujours affiches
+                    v_min = f"{min(prices):.2f}"
+                    v_max = f"{max(prices):.2f}"
+                    v_moy = f"{np.mean(prices_arr):.2f}"
+                    # Percentiles seulement si >= 10 elements (stats fiables)
+                    if v_count >= 10:
+                        v_p10 = f"{np.percentile(prices_arr, 10):.2f}"
+                        v_p20 = f"{np.percentile(prices_arr, 20):.2f}"
+                        v_p50 = f"{np.percentile(prices_arr, 50):.2f}"
+                        v_p80 = f"{np.percentile(prices_arr, 80):.2f}"
+                        v_p90 = f"{np.percentile(prices_arr, 90):.2f}"
+                        p20_val = np.percentile(prices_arr, 20)
+                        p80_val = np.percentile(prices_arr, 80)
+                        if p20_val > 0:
+                            v_disp = f"{p80_val / p20_val:.2f}"
+                        mean = np.mean(prices_arr)
+                        std = np.std(prices_arr)
+                        if mean > 0:
+                            v_cv = f"{std / mean:.2f}"
+                    # % ventes sur 7 derniers jours (toujours affiche)
+                    if dates:
+                        recent_count = sum(1 for d in dates if d >= seven_days_ago)
+                        v_pct_7d = f"{recent_count / len(dates) * 100:.0f}"
+
+                # Stats annonces: min/max/moy depuis le snapshot meta si dispo
+                a_count = snapshot.active_count if snapshot else 0
+                a_min = a_max = a_moy = ''
+                a_p10 = a_p20 = a_p50 = a_p80 = a_p90 = a_disp = a_cv = ''
+                if snapshot:
+                    meta = snapshot.get_raw_meta() if hasattr(snapshot, 'get_raw_meta') else {}
+                    listings = meta.get("listings", [])
+                    if listings:
+                        listing_prices = [l.get("price", 0) for l in listings if l.get("price")]
+                        if listing_prices:
+                            a_min = f"{min(listing_prices):.2f}"
+                            a_max = f"{max(listing_prices):.2f}"
+                            a_moy = f"{sum(listing_prices) / len(listing_prices):.2f}"
+                    # Percentiles seulement si >= 10 annonces
+                    if a_count and a_count >= 10:
+                        if snapshot.p10:
+                            a_p10 = f"{snapshot.p10:.2f}"
+                        if snapshot.p20:
+                            a_p20 = f"{snapshot.p20:.2f}"
+                        if snapshot.p50:
+                            a_p50 = f"{snapshot.p50:.2f}"
+                        if snapshot.p80:
+                            a_p80 = f"{snapshot.p80:.2f}"
+                        if snapshot.p90:
+                            a_p90 = f"{snapshot.p90:.2f}"
+                        if snapshot.dispersion:
+                            a_disp = f"{snapshot.dispersion:.2f}"
+                        if snapshot.cv:
+                            a_cv = f"{snapshot.cv:.2f}"
+
                 writer.writerow([
                     card.id,
                     card.tcgdex_id,
-                    card.name,
-                    card.set_name,
-                    card.local_id,
+                    card.effective_name,
+                    card.effective_set_name,
+                    card.effective_local_id,
                     card.variant.value if card.variant else 'NORMAL',
-                    snapshot.active_count if snapshot else '',
-                    f"{snapshot.p10:.2f}" if snapshot and snapshot.p10 else '',
-                    f"{snapshot.p20:.2f}" if snapshot and snapshot.p20 else '',
-                    f"{snapshot.p50:.2f}" if snapshot and snapshot.p50 else '',
-                    f"{snapshot.p80:.2f}" if snapshot and snapshot.p80 else '',
-                    f"{snapshot.p90:.2f}" if snapshot and snapshot.p90 else '',
-                    f"{snapshot.dispersion:.2f}" if snapshot and snapshot.dispersion else '',
-                    f"{snapshot.cv:.2f}" if snapshot and snapshot.cv else '',
+                    # Stats annonces
+                    a_count if a_count else '',
+                    a_min,
+                    a_max,
+                    a_moy,
+                    a_p10,
+                    a_p20,
+                    a_p50,
+                    a_p80,
+                    a_p90,
+                    a_disp,
+                    a_cv,
                     f"{snapshot.age_median_days:.1f}" if snapshot and snapshot.age_median_days else '',
                     f"{snapshot.pct_recent_7d:.0f}" if snapshot and snapshot.pct_recent_7d else '',
                     f"{snapshot.consensus_score:.0f}" if snapshot and snapshot.consensus_score else '',
                     str(snapshot.as_of_date) if snapshot else '',
+                    # Stats ventes
+                    v_count if v_count > 0 else '',
+                    v_min,
+                    v_max,
+                    v_moy,
+                    v_p10,
+                    v_p20,
+                    v_p50,
+                    v_p80,
+                    v_p90,
+                    v_disp,
+                    v_cv,
+                    v_pct_7d,
+                    s["last_date"].strftime('%Y-%m-%d') if s["last_date"] else '',
                 ])
 
         output.seek(0)
@@ -960,25 +1150,74 @@ def create_app() -> Flask:
     def sold_listings():
         """Liste des annonces disparues (probablement vendues)."""
         from sqlalchemy import func
+        from datetime import datetime, timedelta
 
         page = request.args.get('page', 1, type=int)
         per_page = 50
 
-        with get_session() as session:
-            # Total count
-            total = session.query(SoldListing).count()
+        # Filtres de date
+        date_from = request.args.get('date_from', '')
+        date_to = request.args.get('date_to', '')
+        period = request.args.get('period', '')  # 7d, 30d, 90d
 
-            # Get paginated results with card info
-            listings = session.query(SoldListing, Card).join(
+        with get_session() as session:
+            # Query de base
+            query = session.query(SoldListing, Card).join(
                 Card, SoldListing.card_id == Card.id
-            ).order_by(
+            )
+
+            # Appliquer les filtres de date
+            if period:
+                days = {'7d': 7, '30d': 30, '90d': 90}.get(period, 0)
+                if days:
+                    date_limit = datetime.utcnow() - timedelta(days=days)
+                    query = query.filter(SoldListing.detected_sold_at >= date_limit)
+            else:
+                if date_from:
+                    try:
+                        dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+                        query = query.filter(SoldListing.detected_sold_at >= dt_from)
+                    except ValueError:
+                        pass
+                if date_to:
+                    try:
+                        dt_to = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+                        query = query.filter(SoldListing.detected_sold_at < dt_to)
+                    except ValueError:
+                        pass
+
+            # Total count (avec filtres)
+            total = query.count()
+
+            # Get paginated results
+            listings = query.order_by(
                 SoldListing.detected_sold_at.desc()
             ).offset((page - 1) * per_page).limit(per_page).all()
 
-            # Stats
+            # Stats (sur les resultats filtres)
+            stats_query = session.query(SoldListing)
+            if period:
+                days = {'7d': 7, '30d': 30, '90d': 90}.get(period, 0)
+                if days:
+                    date_limit = datetime.utcnow() - timedelta(days=days)
+                    stats_query = stats_query.filter(SoldListing.detected_sold_at >= date_limit)
+            else:
+                if date_from:
+                    try:
+                        dt_from = datetime.strptime(date_from, '%Y-%m-%d')
+                        stats_query = stats_query.filter(SoldListing.detected_sold_at >= dt_from)
+                    except ValueError:
+                        pass
+                if date_to:
+                    try:
+                        dt_to = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+                        stats_query = stats_query.filter(SoldListing.detected_sold_at < dt_to)
+                    except ValueError:
+                        pass
+
             stats = {
                 'total': total,
-                'total_value': session.query(
+                'total_value': stats_query.with_entities(
                     func.sum(SoldListing.effective_price)
                 ).scalar() or 0
             }
@@ -990,7 +1229,10 @@ def create_app() -> Flask:
                 page=page,
                 per_page=per_page,
                 total=total,
-                total_pages=(total + per_page - 1) // per_page
+                total_pages=(total + per_page - 1) // per_page,
+                date_from=date_from,
+                date_to=date_to,
+                period=period,
             )
 
     return app

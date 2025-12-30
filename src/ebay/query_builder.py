@@ -41,25 +41,38 @@ class EbayQueryBuilder:
         Ex: Alakazam 1/102
         Ex: Alakazam 1/102 edition 1 ed1
         Max 100 caracteres.
+
+        Utilise les valeurs effectives (overrides si definis).
         """
         parts = []
 
-        # 1. Nom de la carte (essentiel)
-        name = self._clean_name(card.name)
+        # 1. Nom de la carte (essentiel) - utilise l'override si defini
+        name = self._clean_name(card.effective_name)
         parts.append(name)
 
         # 2. Numero complet (1/102) ou juste le numero
+        # Utilise effective_local_id pour les overrides
+        effective_local_id = card.effective_local_id
         # Pour les sets promo, utiliser juste le numero + "promo" (pas de /XXX sur les cartes physiques)
         if card.set_id in self.PROMO_SETS:
-            if card.local_id:
-                parts.append(card.local_id)
+            if effective_local_id:
+                parts.append(effective_local_id)
             parts.append("promo")
         elif card.card_number_full:
             # Corriger le padding si local_id commence par 0 (sets modernes)
-            card_number = self._fix_card_number_padding(card.card_number_full, card.local_id)
+            # Si override du local_id, reconstruire le card_number_full
+            if card.local_id_override:
+                # Reconstruire le numero complet avec l'override
+                total_part = card.card_number_full.split("/")[-1] if "/" in card.card_number_full else ""
+                if total_part:
+                    card_number = f"{effective_local_id}/{total_part}"
+                else:
+                    card_number = effective_local_id
+            else:
+                card_number = self._fix_card_number_padding(card.card_number_full, card.local_id)
             parts.append(card_number)
-        elif card.local_id:
-            parts.append(card.local_id)
+        elif effective_local_id:
+            parts.append(effective_local_id)
 
         # 3. Seulement Edition 1 (pas holo, pas reverse, pas normal)
         if card.variant == Variant.FIRST_ED:
@@ -142,10 +155,10 @@ class EbayQueryBuilder:
 
     def build_minimal_query(self, card: Card) -> str:
         """Version minimale de la requete (fallback)."""
-        name = self._clean_name(card.name)
+        name = self._clean_name(card.effective_name)
         parts = [name, "pokemon"]
-        if card.local_id:
-            parts.insert(1, card.local_id)
+        if card.effective_local_id:
+            parts.insert(1, card.effective_local_id)
         return " ".join(parts)
 
     def generate_for_card(self, card: Card) -> str:

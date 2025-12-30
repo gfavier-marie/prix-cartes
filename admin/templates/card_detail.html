@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 
-{% block title %}{{ card.name }}{% endblock %}
+{% block title %}{{ card.effective_name }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>{{ card.name }}</h1>
+    <h1>{{ card.effective_name }}{% if card.name_override %} <span class="badge badge-low" style="font-size: 12px; vertical-align: middle;">Override</span>{% endif %}</h1>
     <p class="mono">{{ card.tcgdex_id }}</p>
 </div>
 
@@ -29,14 +29,88 @@
         <div style="flex: 1;">
             <h2 style="margin-top: 0;">Informations</h2>
             <table class="info-table">
-                <tr><td>Set</td><td>{{ card.set_name }}</td></tr>
-                <tr><td>Numéro</td><td class="mono">{{ card.local_id }}</td></tr>
+                <tr><td>Set</td><td>{{ card.effective_set_name }}{% if card.set_name_override %} <span class="badge badge-low">Override</span>{% endif %}</td></tr>
+                <tr><td>Numéro</td><td class="mono">{{ card.effective_local_id }}{% if card.local_id_override %} <span class="badge badge-low">Override</span>{% endif %}</td></tr>
                 <tr><td>Variant</td><td><span class="badge badge-disabled">{{ card.variant.value if card.variant else 'NORMAL' }}</span></td></tr>
                 <tr><td>Rareté</td><td>{{ card.rarity or '—' }}</td></tr>
             </table>
         </div>
     </div>
 </div>
+
+<!-- Section Edition des informations -->
+<div class="card">
+    <h2>Personnaliser les informations</h2>
+    <p style="margin-bottom: 16px; font-size: 13px; color: var(--text-secondary);">
+        Ces valeurs remplacent les données TCGdex dans toute l'application. Laisser vide pour utiliser les valeurs TCGdex.
+    </p>
+    <form id="card-info-form">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="name_override">Nom de la carte</label>
+                <input type="text" id="name_override" name="name_override" value="{{ card.name_override or '' }}" placeholder="{{ card.name }}">
+                <span style="font-size: 11px; color: var(--text-muted);">TCGdex: {{ card.name }}</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="local_id_override">Numéro de carte</label>
+                <input type="text" id="local_id_override" name="local_id_override" value="{{ card.local_id_override or '' }}" placeholder="{{ card.local_id }}">
+                <span style="font-size: 11px; color: var(--text-muted);">TCGdex: {{ card.local_id }}</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="set_name_override">Nom de la série</label>
+                <input type="text" id="set_name_override" name="set_name_override" value="{{ card.set_name_override or '' }}" placeholder="{{ card.set_name }}">
+                <span style="font-size: 11px; color: var(--text-muted);">TCGdex: {{ card.set_name }}</span>
+            </div>
+        </div>
+        <div style="margin-top: 16px; display: flex; gap: 12px;">
+            <button type="submit" class="btn btn-success" id="save-info-btn">Sauvegarder</button>
+            <button type="button" class="btn btn-ghost" onclick="resetOverrides()">Réinitialiser</button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.getElementById('card-info-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('save-info-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sauvegarde...';
+
+    try {
+        const response = await fetch('/api/cards/{{ card.id }}/update-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name_override: document.getElementById('name_override').value.trim() || null,
+                local_id_override: document.getElementById('local_id_override').value.trim() || null,
+                set_name_override: document.getElementById('set_name_override').value.trim() || null,
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            btn.textContent = 'Sauvegardé !';
+            setTimeout(() => location.reload(), 500);
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            btn.textContent = 'Sauvegarder';
+        }
+    } catch (error) {
+        alert('Erreur: ' + error.message);
+        btn.textContent = 'Sauvegarder';
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+function resetOverrides() {
+    if (confirm('Réinitialiser tous les overrides pour cette carte ?')) {
+        document.getElementById('name_override').value = '';
+        document.getElementById('local_id_override').value = '';
+        document.getElementById('set_name_override').value = '';
+        document.getElementById('card-info-form').dispatchEvent(new Event('submit'));
+    }
+}
+</script>
 
 <div class="card">
     <h2>Requête eBay</h2>
@@ -172,19 +246,51 @@ function renderListings() {
         return;
     }
 
+    // Badge de fiabilité
+    const count = currentListings.length;
+    let reliabilityBadge = '';
+    if (count >= 10) {
+        reliabilityBadge = '<span class="badge badge-ok" title="Stats fiables (>= 10 annonces)">Fiable</span>';
+    } else if (count >= 5) {
+        reliabilityBadge = '<span class="badge badge-warning" title="Stats approximatives (5-9 annonces)">Approx.</span>';
+    } else {
+        reliabilityBadge = '<span class="badge badge-low" title="Stats peu fiables (< 5 annonces)">Peu fiable</span>';
+    }
+
+    // Afficher percentiles seulement si >= 10, sinon min/max/median
+    let statsHtml = '';
+    if (count >= 10 && currentStats) {
+        statsHtml = `
+            ${currentStats.p10 ? `<div>p10: <span class="price">${currentStats.p10.toFixed(2)} €</span></div>` : ''}
+            ${currentStats.p20 ? `<div>p20: <span class="price" style="font-weight: 600;">${currentStats.p20.toFixed(2)} €</span></div>` : ''}
+            ${currentStats.p50 ? `<div>p50: <span class="price">${currentStats.p50.toFixed(2)} €</span></div>` : ''}
+            ${currentStats.p80 ? `<div>p80: <span class="price">${currentStats.p80.toFixed(2)} €</span></div>` : ''}
+            ${currentStats.p90 ? `<div>p90: <span class="price">${currentStats.p90.toFixed(2)} €</span></div>` : ''}
+        `;
+    } else if (count > 0) {
+        // Calculer min/max/median depuis les listings
+        const prices = currentListings.map(l => l.effective_price || l.price || 0).filter(p => p > 0).sort((a, b) => a - b);
+        if (prices.length > 0) {
+            const min = prices[0];
+            const max = prices[prices.length - 1];
+            const median = prices[Math.floor(prices.length / 2)];
+            statsHtml = `
+                <div>Min: <span class="price">${min.toFixed(2)} €</span></div>
+                <div>Med: <span class="price" style="font-weight: 600;">${median.toFixed(2)} €</span></div>
+                <div>Max: <span class="price">${max.toFixed(2)} €</span></div>
+            `;
+        }
+    }
+
     let html = `
         <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
             <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-                <div><strong>${currentListings.length}</strong> annonces (max 50)</div>
-                ${currentStats?.p10 ? `<div>p10: <span class="price">${currentStats.p10.toFixed(2)} €</span></div>` : ''}
-                ${currentStats?.p20 ? `<div>p20: <span class="price" style="font-weight: 600;">${currentStats.p20.toFixed(2)} €</span></div>` : ''}
-                ${currentStats?.p50 ? `<div>p50: <span class="price">${currentStats.p50.toFixed(2)} €</span></div>` : ''}
-                ${currentStats?.p80 ? `<div>p80: <span class="price">${currentStats.p80.toFixed(2)} €</span></div>` : ''}
-                ${currentStats?.p90 ? `<div>p90: <span class="price">${currentStats.p90.toFixed(2)} €</span></div>` : ''}
+                <div><strong>${count}</strong> annonces (max 50) ${reliabilityBadge}</div>
+                ${statsHtml}
             </div>
             <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
-                ${currentStats?.dispersion ? `<div>Dispersion: <span class="${currentStats.dispersion > 4 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.dispersion.toFixed(2)}</span></div>` : ''}
-                ${currentStats?.cv != null ? `<div>CV: <span style="color: var(--text-primary);">${(currentStats.cv * 100).toFixed(0)}%</span></div>` : ''}
+                ${count >= 10 && currentStats?.dispersion ? `<div>Dispersion: <span class="${currentStats.dispersion > 4 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.dispersion.toFixed(2)}</span></div>` : ''}
+                ${count >= 10 && currentStats?.cv != null ? `<div>CV: <span style="color: var(--text-primary);">${(currentStats.cv * 100).toFixed(0)}%</span></div>` : ''}
                 ${currentStats?.consensus_score != null ? `<div>Consensus: <span class="${currentStats.consensus_score >= 70 ? 'badge badge-ok' : currentStats.consensus_score < 50 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.consensus_score.toFixed(0)}%</span></div>` : ''}
                 ${currentStats?.age_median_days != null ? `<div>Âge médian: <span class="${currentStats.age_median_days > 30 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.age_median_days.toFixed(0)}j</span></div>` : ''}
                 ${currentStats?.pct_recent_7d != null ? `<div>< 7j: <span style="color: var(--text-primary);">${currentStats.pct_recent_7d.toFixed(0)}%</span></div>` : ''}
@@ -297,15 +403,30 @@ document.addEventListener('DOMContentLoaded', () => loadListings(false));
     <h2>Ventes detectees</h2>
     {% if sold_listings %}
     <!-- Stats des ventes -->
+    {% set v_count = sold_stats.count if sold_stats else sold_listings|length %}
     <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
         <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-            <div><strong>{{ sold_stats.count if sold_stats else sold_listings|length }}</strong> ventes</div>
-            {% if sold_stats %}
+            <div>
+                <strong>{{ v_count }}</strong> ventes
+                {% if v_count >= 10 %}
+                <span class="badge badge-ok" title="Stats fiables (>= 10 ventes)">Fiable</span>
+                {% elif v_count >= 5 %}
+                <span class="badge badge-warning" title="Stats approximatives (5-9 ventes)">Approx.</span>
+                {% else %}
+                <span class="badge badge-low" title="Stats peu fiables (< 5 ventes)">Peu fiable</span>
+                {% endif %}
+            </div>
+            {% if sold_stats and v_count >= 10 %}
             {% if sold_stats.p10 %}<div>p10: <span class="price">{{ "%.2f"|format(sold_stats.p10) }} €</span></div>{% endif %}
             {% if sold_stats.p20 %}<div>p20: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(sold_stats.p20) }} €</span></div>{% endif %}
             {% if sold_stats.p50 %}<div>p50: <span class="price">{{ "%.2f"|format(sold_stats.p50) }} €</span></div>{% endif %}
             {% if sold_stats.p80 %}<div>p80: <span class="price">{{ "%.2f"|format(sold_stats.p80) }} €</span></div>{% endif %}
             {% if sold_stats.p90 %}<div>p90: <span class="price">{{ "%.2f"|format(sold_stats.p90) }} €</span></div>{% endif %}
+            {% elif sold_stats and v_count < 10 %}
+            {# Afficher min/max/moy si < 10 ventes #}
+            <div>Min: <span class="price">{{ "%.2f"|format(sold_stats.p10) }} €</span></div>
+            <div>Max: <span class="price">{{ "%.2f"|format(sold_stats.p90) }} €</span></div>
+            <div>Med: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(sold_stats.p50) }} €</span></div>
             {% endif %}
         </div>
         <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">

@@ -107,6 +107,11 @@ class Card(Base):
     ebay_query = Column(Text, nullable=True)
     ebay_query_override = Column(Text, nullable=True)
 
+    # Overrides manuels (prioritaires sur les valeurs TCGdex)
+    name_override = Column(String(200), nullable=True)
+    local_id_override = Column(String(20), nullable=True)
+    set_name_override = Column(String(200), nullable=True)
+
     # Prix Cardmarket (via TCGdex)
     cm_trend = Column(Float, nullable=True)
     cm_avg1 = Column(Float, nullable=True)
@@ -152,6 +157,26 @@ class Card(Base):
         """Retourne le max entre trend et avg30."""
         values = [v for v in [self.cm_trend, self.cm_avg30] if v is not None]
         return max(values) if values else None
+
+    @property
+    def effective_name(self) -> str:
+        """Retourne le nom override s'il existe, sinon le nom TCGdex."""
+        return self.name_override or self.name
+
+    @property
+    def effective_local_id(self) -> str:
+        """Retourne le numero override s'il existe, sinon le numero TCGdex."""
+        return self.local_id_override or self.local_id
+
+    @property
+    def effective_set_name(self) -> str:
+        """Retourne le nom de serie override s'il existe, sinon le nom TCGdex."""
+        return self.set_name_override or self.set_name
+
+    @property
+    def has_overrides(self) -> bool:
+        """Retourne True si au moins un override est defini."""
+        return bool(self.name_override or self.local_id_override or self.set_name_override)
 
     def __repr__(self) -> str:
         return f"<Card {self.tcgdex_id}: {self.name} ({self.variant.value})>"

@@ -192,6 +192,36 @@ def export_csv(output, full, anomalies, min_confidence, include_low_conf):
     console.print(f"[green]Termine: {stats['exported']} lignes exportees vers {output}[/green]")
 
 
+@cli.command("export-sales")
+@click.argument("output", type=click.Path())
+@click.option("--summary", is_flag=True, help="Export resume par carte (au lieu de detail)")
+@click.option("--days", type=int, help="Limiter aux N derniers jours")
+@click.option("--date-from", type=click.DateTime(formats=["%Y-%m-%d"]), help="Date de debut (YYYY-MM-DD)")
+@click.option("--date-to", type=click.DateTime(formats=["%Y-%m-%d"]), help="Date de fin (YYYY-MM-DD)")
+def export_sales(output, summary, days, date_from, date_to):
+    """Exporte les ventes detectees en CSV."""
+    from datetime import datetime, timedelta
+    from src.export import CSVExporter
+
+    exporter = CSVExporter()
+    output_path = Path(output)
+
+    # Gestion des dates
+    if days:
+        date_from = datetime.utcnow() - timedelta(days=days)
+
+    if summary:
+        console.print("[cyan]Export resume des ventes par carte...[/cyan]")
+        stats = exporter.export_sales_summary(output_path, date_from=date_from, date_to=date_to)
+        console.print(f"[green]Termine: {stats['exported']} cartes, {stats['total_sales']} ventes[/green]")
+    else:
+        console.print("[cyan]Export des ventes detaillees...[/cyan]")
+        stats = exporter.export_sales(output_path, date_from=date_from, date_to=date_to)
+        console.print(f"[green]Termine: {stats['exported']} ventes ({stats['total_value']:.2f} EUR)[/green]")
+
+    console.print(f"Fichier: {output}")
+
+
 @cli.command()
 @click.option("--host", default="127.0.0.1", help="Host du serveur")
 @click.option("--port", default=5000, type=int, help="Port du serveur")

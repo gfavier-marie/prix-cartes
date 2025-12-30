@@ -5,9 +5,47 @@
 {% block content %}
 {% set filter_params = "search=" ~ search ~ "&has_data=" ~ has_data ~ "&set=" ~ set_filter ~ "&date_filter=" ~ date_filter ~ "&date_from=" ~ date_from ~ "&date_to=" ~ date_to ~ "&months_ago=" ~ months_ago ~ "&has_error=" ~ has_error %}
 <div class="page-header">
-    <h1>Cartes</h1>
-    <p>{{ "{:,}".format(total).replace(",", " ") }} cartes trouvées</p>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1>Cartes</h1>
+            <p>{{ "{:,}".format(total).replace(",", " ") }} cartes trouvées</p>
+        </div>
+        <button type="button" class="btn btn-ghost" onclick="regenerateAllQueries()" id="regen-btn">
+            Régénérer requêtes eBay
+        </button>
+    </div>
 </div>
+
+<script>
+async function regenerateAllQueries() {
+    const btn = document.getElementById('regen-btn');
+    const originalText = btn.textContent;
+
+    if (!confirm('Régénérer toutes les requêtes eBay ? Cette opération peut prendre quelques secondes.')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Régénération...';
+
+    try {
+        const response = await fetch('/api/cards/regenerate-queries', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.success) {
+            alert(`${data.updated} requêtes mises à jour sur ${data.total_cards} cartes.`);
+            location.reload();
+        } else {
+            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        }
+    } catch (e) {
+        alert('Erreur réseau: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+</script>
 
 <form class="filters" method="GET">
     <div class="filter-group">
@@ -142,13 +180,13 @@ function toggleDateInputs() {
             {% for card, snapshot, sold_count in cards %}
             <tr>
                 <td style="width: 50px; padding: 4px;">
-                    <img src="{{ card.image_url }}" alt="{{ card.name }}" style="height: 50px; border-radius: 3px;" loading="lazy" onerror="this.style.display='none'">
+                    <img src="{{ card.image_url }}" alt="{{ card.effective_name }}" style="height: 50px; border-radius: 3px;" loading="lazy" onerror="this.style.display='none'">
                 </td>
                 <td>
-                    <a href="{{ url_for('card_detail', card_id=card.id) }}?page={{ page }}&{{ filter_params }}" class="link card-name">{{ card.name }}</a>
-                    <div class="card-meta mono">{{ card.local_id }} {% if card.ebay_query_override %}· Override{% endif %}</div>
+                    <a href="{{ url_for('card_detail', card_id=card.id) }}?page={{ page }}&{{ filter_params }}" class="link card-name">{{ card.effective_name }}</a>
+                    <div class="card-meta mono">{{ card.effective_local_id }} {% if card.has_overrides %}· <span style="color: var(--accent-blue);">Override</span>{% endif %}</div>
                 </td>
-                <td class="text-secondary">{{ card.set_name }}</td>
+                <td class="text-secondary">{{ card.effective_set_name }}</td>
                 <td>
                     <span class="badge badge-disabled">{{ card.variant.value if card.variant else 'NORMAL' }}</span>
                 </td>

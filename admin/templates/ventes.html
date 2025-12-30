@@ -3,15 +3,49 @@
 {% block title %}Ventes detectees{% endblock %}
 
 {% block content %}
+{% set filter_params = "date_from=" ~ date_from ~ "&date_to=" ~ date_to ~ "&period=" ~ period %}
 <div class="page-header">
     <h1>Ventes detectees</h1>
     <p>Annonces eBay disparues entre deux snapshots (probablement vendues)</p>
 </div>
 
+<!-- Filtres -->
+<form class="filters" method="GET" style="margin-bottom: 20px;">
+    <div class="filter-group">
+        <label>Periode</label>
+        <select name="period" onchange="toggleDateInputs()">
+            <option value="">Toutes</option>
+            <option value="7d" {% if period == '7d' %}selected{% endif %}>7 derniers jours</option>
+            <option value="30d" {% if period == '30d' %}selected{% endif %}>30 derniers jours</option>
+            <option value="90d" {% if period == '90d' %}selected{% endif %}>90 derniers jours</option>
+        </select>
+    </div>
+    <div class="filter-group" id="date-from-group" style="{% if period %}display: none;{% endif %}">
+        <label>Du</label>
+        <input type="date" name="date_from" value="{{ date_from }}">
+    </div>
+    <div class="filter-group" id="date-to-group" style="{% if period %}display: none;{% endif %}">
+        <label>Au</label>
+        <input type="date" name="date_to" value="{{ date_to }}">
+    </div>
+    <button type="submit" class="btn btn-primary">Filtrer</button>
+    {% if date_from or date_to or period %}
+    <a href="{{ url_for('sold_listings') }}" class="btn btn-ghost">Reset</a>
+    {% endif %}
+</form>
+
+<script>
+function toggleDateInputs() {
+    const period = document.querySelector('select[name="period"]').value;
+    document.getElementById('date-from-group').style.display = period ? 'none' : '';
+    document.getElementById('date-to-group').style.display = period ? 'none' : '';
+}
+</script>
+
 <div class="stats-grid">
     <div class="stat-box accent-green">
         <div class="stat-value">{{ stats.total }}</div>
-        <div class="stat-label">Ventes detectees</div>
+        <div class="stat-label">Ventes {% if period or date_from or date_to %}(filtrees){% endif %}</div>
     </div>
     <div class="stat-box accent-blue">
         <div class="stat-value">{{ "%.2f"|format(stats.total_value) }} EUR</div>
@@ -29,7 +63,7 @@
                 <th>Annonce eBay</th>
                 <th>Prix</th>
                 <th>Vendeur</th>
-                <th>Detectee le</th>
+                <th>Date vente</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -59,18 +93,20 @@
                     <div class="card-meta">{{ sold.condition or '-' }}</div>
                 </td>
                 <td>
-                    <span class="price price-main">{{ "%.2f"|format(sold.effective_price or 0) }} EUR</span>
-                    {% if sold.price and sold.effective_price and sold.effective_price != sold.price %}
-                    <div class="card-meta">Base: {{ "%.2f"|format(sold.price) }} EUR</div>
+                    <span class="price" style="color: var(--accent-green);">{{ "%.2f"|format(sold.price or 0) }} EUR</span>
+                    {% if sold.effective_price and sold.price and sold.effective_price != sold.price %}
+                    <div class="card-meta">+ {{ "%.2f"|format(sold.effective_price - sold.price) }} EUR port</div>
+                    {% elif not sold.price and sold.effective_price %}
+                    <span class="price" style="color: var(--accent-green);">{{ "%.2f"|format(sold.effective_price) }} EUR</span>
                     {% endif %}
                 </td>
                 <td>
                     <span class="text-secondary">{{ sold.seller or '-' }}</span>
                 </td>
                 <td>
-                    <span class="text-secondary">{{ sold.detected_sold_at.strftime('%d/%m/%Y %H:%M') }}</span>
-                    {% if sold.first_seen_at %}
-                    <div class="card-meta">Vue: {{ sold.first_seen_at.strftime('%d/%m') }}</div>
+                    <span class="text-secondary">{{ sold.detected_sold_at.strftime('%d/%m/%Y') }}</span>
+                    {% if sold.listing_date %}
+                    <div class="card-meta">Mise en ligne: {{ sold.listing_date[:10] if sold.listing_date is string else sold.listing_date.strftime('%d/%m/%Y') }}</div>
                     {% endif %}
                 </td>
                 <td>
@@ -88,21 +124,19 @@
     {% if total_pages > 1 %}
     <div class="pagination">
         {% if page > 1 %}
-        <a href="{{ url_for('sold_listings', page=page-1) }}">Precedent</a>
+        <a href="?page={{ page - 1 }}&{{ filter_params }}">←</a>
         {% endif %}
 
         {% for p in range(1, total_pages + 1) %}
-            {% if p == page %}
-            <a href="#" class="active">{{ p }}</a>
-            {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
-            <a href="{{ url_for('sold_listings', page=p) }}">{{ p }}</a>
-            {% elif p == 4 or p == total_pages - 2 %}
-            <span style="padding: 0 8px;">...</span>
+            {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                <a href="?page={{ p }}&{{ filter_params }}" class="{% if p == page %}active{% endif %}">{{ p }}</a>
+            {% elif p == page - 3 or p == page + 3 %}
+                <span style="color: var(--text-muted); padding: 0 8px;">...</span>
             {% endif %}
         {% endfor %}
 
         {% if page < total_pages %}
-        <a href="{{ url_for('sold_listings', page=page+1) }}">Suivant</a>
+        <a href="?page={{ page + 1 }}&{{ filter_params }}">→</a>
         {% endif %}
     </div>
     {% endif %}
