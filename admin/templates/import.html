@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Import CSV{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Import CSV</h1>
+    <p>Modifier des cartes existantes ou en creer de nouvelles via fichier CSV</p>
+</div>
+
+<div class="info-grid">
+    <div class="card">
+        <h2>Importer un fichier</h2>
+
+        <form id="import-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="csv-file">Fichier CSV (separateur: point-virgule)</label>
+                <input type="file" id="csv-file" name="file" accept=".csv" required>
+            </div>
+            <button type="submit" class="btn btn-primary" id="submit-btn">Importer</button>
+        </form>
+
+        <div id="result" style="margin-top: 20px; display: none;"></div>
+    </div>
+
+    <div class="card">
+        <h2>Format du fichier</h2>
+
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">
+            Le fichier CSV doit utiliser le <strong>point-virgule (;)</strong> comme separateur.
+        </p>
+
+        <h3 style="font-size: 14px; margin-bottom: 8px;">Colonnes disponibles :</h3>
+        <table class="info-table" style="margin-bottom: 20px;">
+            <tr><td><code>id</code></td><td>ID numerique ou tcgdex_id (pour modification)</td></tr>
+            <tr><td><code>name</code></td><td>Nom de la carte</td></tr>
+            <tr><td><code>local_id</code></td><td>Numero dans le set (ex: 25, 001)</td></tr>
+            <tr><td><code>set_name</code></td><td>Nom du set (pour affichage)</td></tr>
+            <tr><td><code>set_id</code></td><td>ID du set (pour creation)</td></tr>
+            <tr><td><code>variant</code></td><td>NORMAL, REVERSE, HOLO, FIRST_ED</td></tr>
+            <tr><td><code>ebay_query</code></td><td>Requete eBay personnalisee (override)</td></tr>
+        </table>
+
+        <h3 style="font-size: 14px; margin-bottom: 8px;">Mode modification (id renseigne) :</h3>
+        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_name;ebay_query
+123;Pikachu;25;;
+456;Dracaufeu;4;Set de Base;Dracaufeu 4/102 pokemon</div>
+
+        <h3 style="font-size: 14px; margin-bottom: 8px;">Mode creation (id vide) :</h3>
+        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_id;variant;ebay_query
+;Ma Carte;001;sv08;NORMAL;
+;Autre Carte;002;sv08;REVERSE;Ma requete eBay custom</div>
+
+        <p style="color: var(--text-secondary); font-size: 13px;">
+            Pour trouver les <code>set_id</code> valides,
+            <a href="{{ url_for('export_sets_reference') }}" class="link">telecharger la reference des sets</a>.
+        </p>
+
+        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+            <a href="{{ url_for('export_import_template') }}" class="btn btn-ghost">Telecharger le modele CSV</a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('import-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const fileInput = document.getElementById('csv-file');
+    const submitBtn = document.getElementById('submit-btn');
+    const resultDiv = document.getElementById('result');
+
+    if (!fileInput.files.length) {
+        alert('Veuillez selectionner un fichier');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Import en cours...';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/cards/import-csv', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        let html = '';
+        if (data.success) {
+            html = `
+                <div class="flash success">
+                    ${data.message}
+                </div>
+            `;
+
+            if (data.details && data.details.length > 0) {
+                html += `
+                    <details style="margin-top: 12px;">
+                        <summary style="cursor: pointer; color: var(--accent-green);">
+                            Details (${data.details.length})
+                        </summary>
+                        <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary); font-size: 13px;">
+                            ${data.details.map(d => `<li>${d}</li>`).join('')}
+                        </ul>
+                    </details>
+                `;
+            }
+
+            if (data.errors && data.errors.length > 0) {
+                html += `
+                    <details style="margin-top: 12px;">
+                        <summary style="cursor: pointer; color: var(--accent-yellow);">
+                            Avertissements (${data.errors.length})
+                        </summary>
+                        <ul style="margin-top: 8px; padding-left: 20px; color: var(--accent-yellow); font-size: 13px;">
+                            ${data.errors.map(e => `<li>${e}</li>`).join('')}
+                        </ul>
+                    </details>
+                `;
+            }
+        } else {
+            html = `
+                <div class="flash error">
+                    Erreur: ${data.error}
+                </div>
+            `;
+        }
+
+        resultDiv.innerHTML = html;
+        resultDiv.style.display = 'block';
+
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="flash error">
+                Erreur reseau: ${error.message}
+            </div>
+        `;
+        resultDiv.style.display = 'block';
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Importer';
+    }
+});
+</script>
+{% endblock %}

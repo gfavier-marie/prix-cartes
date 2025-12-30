@@ -1,6 +1,6 @@
 """
 Modeles SQLAlchemy pour la base de donnees.
-Tables: cards, market_snapshots, buy_prices, batch_runs, fx_rates
+Tables: sets, cards, market_snapshots, buy_prices, batch_runs, fx_rates
 """
 
 from datetime import datetime, date
@@ -23,34 +23,8 @@ from sqlalchemy import (
     create_engine,
 )
 from sqlalchemy.orm import declarative_base, relationship
-import sqlite3
-from pathlib import Path
-from functools import lru_cache
 
 Base = declarative_base()
-
-
-# Cache pour le mapping set_id -> serie_id
-@lru_cache(maxsize=1)
-def _load_serie_mapping() -> dict[str, str]:
-    """Charge le mapping set_id -> serie_id depuis tcgdex_full.db."""
-    db_path = Path(__file__).parent.parent / "data" / "tcgdex_full.db"
-    mapping = {}
-    if db_path.exists():
-        try:
-            conn = sqlite3.connect(str(db_path))
-            cursor = conn.execute("SELECT id, serie_id FROM tcgdex_sets")
-            for row in cursor:
-                mapping[row[0]] = row[1]
-            conn.close()
-        except Exception:
-            pass
-    return mapping
-
-
-def _get_serie_id(set_id: str) -> Optional[str]:
-    """Retourne le serie_id pour un set_id donne."""
-    return _load_serie_mapping().get(set_id)
 
 
 class Variant(PyEnum):
@@ -81,6 +55,33 @@ class BatchMode(PyEnum):
     HYBRID = "HYBRID"
 
 
+class Set(Base):
+    """Table des sets Pokemon (extensions)."""
+
+    __tablename__ = "sets"
+
+    id = Column(String(50), primary_key=True)  # ex: "sv08", "swsh12"
+    name = Column(String(200), nullable=False)  # ex: "Surging Sparks"
+    serie_id = Column(String(50), nullable=False, index=True)  # ex: "sv", "swsh"
+    serie_name = Column(String(200), nullable=False)  # ex: "Scarlet & Violet"
+    release_date = Column(Date, nullable=True)
+    card_count = Column(Integer, nullable=True)  # Nombre total de cartes
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relations
+    cards = relationship("Card", back_populates="set_info", foreign_keys="Card.set_id")
+
+    # Index
+    __table_args__ = (
+        Index("ix_sets_serie", "serie_id"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Set {self.id}: {self.name}>"
+
+
 class Card(Base):
     """Table des cartes Pokemon."""
 
@@ -90,7 +91,7 @@ class Card(Base):
 
     # Identifiants TCGdex
     tcgdex_id = Column(String(100), unique=True, nullable=False, index=True)
-    set_id = Column(String(50), nullable=False, index=True)
+    set_id = Column(String(50), ForeignKey("sets.id"), nullable=False, index=True)
     local_id = Column(String(20), nullable=False)  # Numero dans le set
 
     # Infos carte
@@ -128,6 +129,7 @@ class Card(Base):
     last_error_at = Column(DateTime, nullable=True)
 
     # Relations
+    set_info = relationship("Set", back_populates="cards", foreign_keys=[set_id])
     snapshots = relationship("MarketSnapshot", back_populates="card", cascade="all, delete-orphan")
     buy_price = relationship("BuyPrice", back_populates="card", uselist=False, cascade="all, delete-orphan")
 
@@ -141,10 +143,9 @@ class Card(Base):
     @property
     def image_url(self) -> str:
         """Retourne l'URL de l'image TCGdex."""
-        serie_id = _get_serie_id(self.set_id)
-        if serie_id:
-            return f"https://assets.tcgdex.net/fr/{serie_id}/{self.set_id}/{self.local_id}/low.png"
-        # Fallback si serie_id non trouvé
+        if self.set_info and self.set_info.serie_id:
+            return f"https://assets.tcgdex.net/fr/{self.set_info.serie_id}/{self.set_id}/{self.local_id}/low.png"
+        # Fallback si serie_id non disponible
         return f"https://assets.tcgdex.net/fr/{self.set_id}/{self.local_id}/low.png"
 
     @property

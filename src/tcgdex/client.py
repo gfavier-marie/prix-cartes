@@ -23,6 +23,8 @@ class TCGdexSet:
     card_count_total: Optional[int] = None
     release_date: Optional[str] = None
     logo: Optional[str] = None
+    serie_id: Optional[str] = None
+    serie_name: Optional[str] = None
 
 
 @dataclass
@@ -108,6 +110,7 @@ class TCGdexClient:
             data = self._get(f"sets/{set_id}")
 
             card_count = data.get("cardCount", {})
+            serie_data = data.get("serie", {})
             return TCGdexSet(
                 id=data.get("id", ""),
                 name=data.get("name", ""),
@@ -116,6 +119,8 @@ class TCGdexClient:
                 card_count_total=card_count.get("total"),
                 release_date=data.get("releaseDate"),
                 logo=data.get("logo"),
+                serie_id=serie_data.get("id"),
+                serie_name=serie_data.get("name"),
             )
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:

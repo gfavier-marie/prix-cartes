@@ -236,6 +236,100 @@ def admin(host, port):
     app.run(host=host, port=port, debug=True)
 
 
+@cli.command("migrate-sets")
+def migrate_sets():
+    """Migre les sets existants: cree les enregistrements Set pour les cartes existantes."""
+    from src.models import Set
+    from src.tcgdex.client import TCGdexClient
+    from datetime import date
+
+    init_db()  # S'assurer que les tables existent (dont la nouvelle table sets)
+
+    client = TCGdexClient()
+
+    with get_session() as session:
+        # Recuperer tous les set_id uniques depuis les cartes
+        existing_card_set_ids = set(
+            row[0] for row in session.query(Card.set_id).distinct().all()
+        )
+
+        # Recuperer les sets deja dans la table
+        existing_sets = set(
+            row[0] for row in session.query(Set.id).all()
+        )
+
+        # Sets a creer
+        sets_to_create = existing_card_set_ids - existing_sets
+
+        if not sets_to_create:
+            console.print("[green]Tous les sets sont deja migres.[/green]")
+            return
+
+        console.print(f"[cyan]Migration de {len(sets_to_create)} sets...[/cyan]")
+
+        created = 0
+        errors = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Migration des sets", total=len(sets_to_create))
+
+            for set_id in sets_to_create:
+                try:
+                    # Recuperer les infos depuis TCGdex
+                    tcgdex_set = client.get_set(set_id)
+
+                    if tcgdex_set:
+                        # Parser la date
+                        release_date = None
+                        if tcgdex_set.release_date:
+                            try:
+                                release_date = date.fromisoformat(tcgdex_set.release_date)
+                            except ValueError:
+                                pass
+
+                        new_set = Set(
+                            id=set_id,
+                            name=tcgdex_set.name,
+                            serie_id=tcgdex_set.serie_id or "unknown",
+                            serie_name=tcgdex_set.serie_name or "Unknown",
+                            release_date=release_date,
+                            card_count=tcgdex_set.card_count_total,
+                        )
+                        session.add(new_set)
+                        created += 1
+                    else:
+                        # Set non trouve sur TCGdex - creer avec valeurs par defaut
+                        # Recuperer le set_name depuis une carte
+                        card = session.query(Card).filter(Card.set_id == set_id).first()
+                        set_name = card.set_name if card else set_id
+
+                        new_set = Set(
+                            id=set_id,
+                            name=set_name,
+                            serie_id="unknown",
+                            serie_name="Unknown",
+                        )
+                        session.add(new_set)
+                        created += 1
+                        console.print(f"[yellow]Set {set_id} non trouve sur TCGdex, cree avec valeurs par defaut[/yellow]")
+
+                except Exception as e:
+                    console.print(f"[red]Erreur pour {set_id}: {e}[/red]")
+                    errors += 1
+
+                progress.update(task, advance=1)
+
+        session.commit()
+
+    console.print(f"[green]Migration terminee: {created} sets crees, {errors} erreurs[/green]")
+
+
 @cli.command()
 def stats():
     """Affiche les statistiques de la base."""

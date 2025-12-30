@@ -323,28 +323,37 @@ class EbayClient:
                 if exclusion in title_lower:
                     return True
 
-        # Verifier le numero de carte si fourni
-        if card_number:
+        # Verifier le numero de carte si fourni ET si on a un card_number_full
+        # Si card_number_full est None (promo, cartes speciales), ne pas filtrer sur le numero
+        if card_number and card_number_full:
             # Le numero doit apparaitre dans le titre, precede d'un non-chiffre
             # Ex: "1/102" doit matcher "1/102" mais pas "21/102" ou "1" dans "Edition 1"
-            num = card_number
 
-            if card_number_full and "/" in card_number_full:
-                # On a le format complet X/Y
+            if "/" in card_number_full:
                 num, total = card_number_full.split("/")
-                # Enlever les zeros de padding pour la comparaison flexible
-                num_stripped = num.lstrip('0') or '0'
-                total_stripped = total.lstrip('0') or '0'
-                # Pattern: X/Y avec X non precede d'un chiffre, zeros optionnels
-                # Accepte 039/094, 39/94, 039/94, etc.
-                pattern = rf'(?<![0-9])0*{re.escape(num_stripped)}\s*/\s*0*{re.escape(total_stripped)}'
-                if re.search(pattern, title):
-                    return False  # Numero trouve, ne pas exclure
+
+                # Verifier si le numero est purement numerique ou alphanumerique (ex: SL7)
+                if num.isdigit():
+                    # Format numerique classique X/Y
+                    # Enlever les zeros de padding pour la comparaison flexible
+                    num_stripped = num.lstrip('0') or '0'
+                    total_stripped = total.lstrip('0') or '0'
+                    # Pattern: X/Y avec X non precede d'un chiffre, zeros optionnels
+                    # Accepte 039/094, 39/94, 039/94, etc.
+                    pattern = rf'(?<![0-9])0*{re.escape(num_stripped)}\s*/\s*0*{re.escape(total_stripped)}'
+                    if re.search(pattern, title):
+                        return False  # Numero trouve, ne pas exclure
+                else:
+                    # Format alphanumerique (ex: SL7/95, TG01/30)
+                    # Chercher juste le numero (SL7) sans le total, insensible a la casse
+                    # Pattern: le numero alphanumerique comme mot distinct
+                    pattern = rf'(?i)\b{re.escape(num)}\b'
+                    if re.search(pattern, title):
+                        return False  # Numero trouve, ne pas exclure
             else:
-                # Sets promo: pas de format X/Y
-                # Accepter: "22 promo", "promo 22", "22/" (si existe quand meme)
+                # Format sans slash (rare mais possible)
                 # Pattern: numero precede d'un non-chiffre et suivi d'un non-chiffre
-                pattern = rf'(?<![0-9]){re.escape(num)}(?![0-9])'
+                pattern = rf'(?<![0-9]){re.escape(card_number)}(?![0-9])'
                 if re.search(pattern, title):
                     return False  # Numero trouve
 

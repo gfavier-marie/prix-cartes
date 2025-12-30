@@ -10,8 +10,10 @@ from rich.progress import Progress, TaskID
 
 from sqlalchemy.orm import Session
 
-from .client import TCGdexClient, TCGdexCard
-from ..models import Card, Variant
+from datetime import date
+
+from .client import TCGdexClient, TCGdexCard, TCGdexSet
+from ..models import Card, Variant, Set
 from ..database import get_session
 from ..config import get_config
 
@@ -69,7 +71,13 @@ class TCGdexImporter:
 
     def import_set(self, set_id: str) -> dict:
         """Importe toutes les cartes d'un set."""
-        stats = {"created": 0, "updated": 0}
+        stats = {"created": 0, "updated": 0, "set_created": False}
+
+        # D'abord recuperer les infos du set et le creer/mettre a jour
+        tcgdex_set = self.client.get_set(set_id)
+        if tcgdex_set:
+            self._upsert_set(tcgdex_set)
+            stats["set_created"] = True
 
         cards = self.client.get_cards_from_set(set_id)
 
@@ -90,6 +98,43 @@ class TCGdexImporter:
                     stats["updated"] += 1
 
         return stats
+
+    def _upsert_set(self, tcgdex_set: TCGdexSet) -> None:
+        """Cree ou met a jour un set."""
+        session = self._get_session()
+
+        existing = session.query(Set).filter(Set.id == tcgdex_set.id).first()
+
+        # Parser la date de sortie
+        release_date = None
+        if tcgdex_set.release_date:
+            try:
+                release_date = date.fromisoformat(tcgdex_set.release_date)
+            except ValueError:
+                pass
+
+        if existing:
+            # Mise a jour
+            existing.name = tcgdex_set.name
+            if tcgdex_set.serie_id:
+                existing.serie_id = tcgdex_set.serie_id
+            if tcgdex_set.serie_name:
+                existing.serie_name = tcgdex_set.serie_name
+            if release_date:
+                existing.release_date = release_date
+            if tcgdex_set.card_count_total:
+                existing.card_count = tcgdex_set.card_count_total
+        else:
+            # Creation
+            new_set = Set(
+                id=tcgdex_set.id,
+                name=tcgdex_set.name,
+                serie_id=tcgdex_set.serie_id or "unknown",
+                serie_name=tcgdex_set.serie_name or "Unknown",
+                release_date=release_date,
+                card_count=tcgdex_set.card_count_total,
+            )
+            session.add(new_set)
 
     def import_single_card(self, set_id: str, local_id: str) -> Optional[Card]:
         """Importe une seule carte."""

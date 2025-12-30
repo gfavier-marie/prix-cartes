@@ -102,6 +102,12 @@ class TCGdexConfig:
     # Rate limiting
     requests_per_second: float = 5.0
 
+    # Series a exclure de l'affichage et du traitement
+    excluded_series: list[str] = field(default_factory=list)
+
+    # Sets individuels a exclure (en plus des series)
+    excluded_sets: list[str] = field(default_factory=list)
+
 
 @dataclass
 class DatabaseConfig:
@@ -209,6 +215,8 @@ class AppConfig:
             },
             "tcgdex": {
                 "language": self.tcgdex.language,
+                "excluded_series": self.tcgdex.excluded_series,
+                "excluded_sets": self.tcgdex.excluded_sets,
             },
             "database": {
                 "db_path": str(self.database.db_path),

@@ -119,10 +119,21 @@ class EbayWorker:
             is_first_edition = card.variant == Variant.FIRST_ED
             is_reverse = card.variant == Variant.REVERSE
 
+            # Si override de requete eBay, ne pas appliquer les filtres sur le numero de carte
+            # L'utilisateur a defini une requete custom, on lui fait confiance
+            has_query_override = card.ebay_query_override is not None
+
             # Sets promo: pas de card_number_full (format X/Y n'existe pas sur les cartes physiques)
             from ..ebay.query_builder import EbayQueryBuilder
             is_promo_set = card.set_id in EbayQueryBuilder.PROMO_SETS
-            card_number_full = None if is_promo_set else card.card_number_full
+
+            # Ne pas filtrer sur le numero si override ou set promo
+            if has_query_override or is_promo_set:
+                card_number_for_filter = None
+                card_number_full_for_filter = None
+            else:
+                card_number_for_filter = card.local_id
+                card_number_full_for_filter = card.card_number_full
 
             # Pour tous les variants SAUF REVERSE: recherche sans filtre reverse pour capturer les deux
             # Pour REVERSE: filtrer uniquement les reverse
@@ -138,8 +149,8 @@ class EbayWorker:
                 filter_titles=True,  # Exclure lots/graded
                 is_first_edition=is_first_edition,
                 is_reverse=search_is_reverse,
-                card_number=card.local_id,
-                card_number_full=card_number_full,
+                card_number=card_number_for_filter,
+                card_number_full=card_number_full_for_filter,
             )
 
             result.active_count = search_result.total

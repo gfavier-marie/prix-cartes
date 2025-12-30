@@ -4,68 +4,68 @@ Interface admin Flask pour gerer les prix et les overrides.
 
 from datetime import datetime
 from pathlib import Path
-import sqlite3
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 import csv
 import io
 
-from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage, SoldListing
+from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage, SoldListing, Set
 from src.database import get_session, init_db
 from src.config import get_config
 from src.batch import BatchRunner
+from src.tcgdex.client import TCGdexClient
+from src.tcgdex.importer import TCGdexImporter
 from src.batch.runner import request_stop as batch_request_stop
 from src.batch.queue import get_queue
 from src.ebay import EbayQueryBuilder
 from src.ebay.usage_tracker import get_ebay_usage_summary
 import threading
 
-# Path to TCGdex database for series/set info
-TCGDEX_DB_PATH = Path(__file__).parent.parent / "data" / "tcgdex_full.db"
-
-
 def get_sets_grouped_by_series():
-    """Récupère les sets groupés par série, triés par date (ancien -> récent)."""
-    if not TCGDEX_DB_PATH.exists():
-        return []
+    """Récupère les sets groupés par série, triés par date (ancien -> récent).
 
-    conn = sqlite3.connect(str(TCGDEX_DB_PATH))
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    Utilise la table sets de pricing.db et applique le filtre excluded_series et excluded_sets.
+    """
+    config = get_config()
+    excluded_series = config.tcgdex.excluded_series
+    excluded_sets = config.tcgdex.excluded_sets
 
-    # Séries à exclure (pas de cartes physiques)
-    EXCLUDED_SERIES = ['tcgp']  # Pokémon Pocket
+    with get_session() as session:
+        # Récupérer tous les sets, filtrer les séries et sets exclus
+        query = session.query(Set)
+        if excluded_series:
+            query = query.filter(~Set.serie_id.in_(excluded_series))
+        if excluded_sets:
+            query = query.filter(~Set.id.in_(excluded_sets))
+        sets = query.order_by(Set.release_date).all()
 
-    # Récupérer les séries triées par la plus ancienne date de set
-    cursor.execute("""
-        SELECT serie_id, serie_name, MIN(releasedate) as min_date
-        FROM tcgdex_sets
-        WHERE serie_id IS NOT NULL AND serie_name IS NOT NULL
-          AND serie_id NOT IN ({})
-        GROUP BY serie_id
-        ORDER BY min_date
-    """.format(','.join('?' * len(EXCLUDED_SERIES))), EXCLUDED_SERIES)
-    series = cursor.fetchall()
+        if not sets:
+            return []
 
-    result = []
-    for serie in series:
-        # Récupérer les sets de cette série triés par date
-        cursor.execute("""
-            SELECT id, name, releasedate
-            FROM tcgdex_sets
-            WHERE serie_id = ?
-            ORDER BY releasedate
-        """, (serie['serie_id'],))
-        sets = cursor.fetchall()
+        # Grouper par série
+        series_dict = {}
+        for s in sets:
+            if s.serie_id not in series_dict:
+                series_dict[s.serie_id] = {
+                    'serie_id': s.serie_id,
+                    'serie_name': s.serie_name,
+                    'sets': [],
+                    'min_date': s.release_date
+                }
+            series_dict[s.serie_id]['sets'].append({
+                'id': s.id,
+                'name': s.name,
+                'date': str(s.release_date) if s.release_date else None
+            })
 
-        result.append({
-            'serie_id': serie['serie_id'],
-            'serie_name': serie['serie_name'],
-            'sets': [{'id': s['id'], 'name': s['name'], 'date': s['releasedate']} for s in sets]
-        })
+        # Trier les séries par date la plus ancienne
+        result = sorted(series_dict.values(), key=lambda x: x['min_date'] or '')
 
-    conn.close()
-    return result
+        # Retirer min_date du résultat final
+        for serie in result:
+            del serie['min_date']
+
+        return result
 
 
 def create_app() -> Flask:
@@ -1141,6 +1141,537 @@ def create_app() -> Flask:
                 'Content-Disposition': f'attachment; filename=prix_cartes_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
             }
         )
+
+    @app.route("/export/sets-reference")
+    def export_sets_reference():
+        """Export CSV de reference des sets (pour creer des cartes)."""
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+
+        # Header
+        writer.writerow(['serie_id', 'serie_name', 'set_id', 'set_name', 'release_date'])
+
+        # Recuperer les sets groupes par serie
+        series_sets = get_sets_grouped_by_series()
+
+        for serie in series_sets:
+            for s in serie['sets']:
+                writer.writerow([
+                    serie['serie_id'],
+                    serie['serie_name'],
+                    s['id'],
+                    s['name'],
+                    s['date'] or '',
+                ])
+
+        output.seek(0)
+        csv_content = '\ufeff' + output.getvalue()
+        return Response(
+            csv_content,
+            mimetype='text/csv; charset=utf-8',
+            headers={
+                'Content-Disposition': 'attachment; filename=sets_reference.csv'
+            }
+        )
+
+    # ===================
+    # IMPORT CSV
+    # ===================
+
+    @app.route("/import")
+    def import_page():
+        """Page d'import CSV."""
+        return render_template("import.html")
+
+    @app.route("/export/import-template")
+    def export_import_template():
+        """Telecharge un modele CSV vide pour l'import."""
+        output = io.StringIO()
+        writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+
+        # Header avec toutes les colonnes
+        writer.writerow(['id', 'name', 'local_id', 'set_name', 'set_id', 'variant', 'ebay_query'])
+
+        # Exemples commentes
+        writer.writerow(['# Modification: remplir id, les autres colonnes sont optionnelles', '', '', '', '', '', ''])
+        writer.writerow(['# Exemple modification:', '', '', '', '', '', ''])
+        writer.writerow(['123', 'Pikachu', '25', '', '', '', ''])
+        writer.writerow(['123', '', '', '', '', '', 'Pikachu 25/102 pokemon'])
+        writer.writerow(['# Creation: laisser id vide, remplir name, local_id, set_id obligatoires', '', '', '', '', '', ''])
+        writer.writerow(['# Exemple creation:', '', '', '', '', '', ''])
+        writer.writerow(['', 'Ma Nouvelle Carte', '001', '', 'sv08', 'NORMAL', ''])
+        writer.writerow(['', 'Carte Reverse', '002', '', 'sv08', 'REVERSE', 'Carte Reverse 002 pokemon'])
+
+        output.seek(0)
+        csv_content = '\ufeff' + output.getvalue()
+        return Response(
+            csv_content,
+            mimetype='text/csv; charset=utf-8',
+            headers={
+                'Content-Disposition': 'attachment; filename=modele_import.csv'
+            }
+        )
+
+    @app.route("/api/cards/import-csv", methods=["POST"])
+    def api_import_csv():
+        """API: Importer des cartes depuis un fichier CSV."""
+        from src.models import Variant
+
+        if 'file' not in request.files:
+            return jsonify({"success": False, "error": "Aucun fichier envoye"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "error": "Aucun fichier selectionne"}), 400
+
+        try:
+            # Lire le contenu du fichier
+            content = file.read().decode('utf-8-sig')  # utf-8-sig gere le BOM
+            reader = csv.DictReader(io.StringIO(content), delimiter=';')
+
+            results = {
+                "updated": 0,
+                "created": 0,
+                "errors": [],
+                "details": []
+            }
+
+            with get_session() as session:
+                builder = EbayQueryBuilder()
+
+                for row_num, row in enumerate(reader, start=2):  # start=2 car ligne 1 = header
+                    try:
+                        card_id = row.get('id', '').strip()
+
+                        if card_id:
+                            # Mode mise a jour
+                            # Supporter ID numerique ou tcgdex_id
+                            if card_id.isdigit():
+                                card = session.query(Card).filter(Card.id == int(card_id)).first()
+                            else:
+                                # Chercher par tcgdex_id
+                                card = session.query(Card).filter(Card.tcgdex_id == card_id).first()
+                            if not card:
+                                results["errors"].append(f"Ligne {row_num}: Carte {card_id} non trouvee")
+                                continue
+
+                            # Mettre a jour les overrides si les colonnes sont presentes
+                            updated_fields = []
+                            if 'name' in row and row['name'].strip():
+                                new_name = row['name'].strip()
+                                if new_name != card.name:
+                                    card.name_override = new_name
+                                    updated_fields.append('name')
+
+                            if 'local_id' in row and row['local_id'].strip():
+                                new_local_id = row['local_id'].strip()
+                                if new_local_id != card.local_id:
+                                    card.local_id_override = new_local_id
+                                    updated_fields.append('local_id')
+
+                            if 'set_name' in row and row['set_name'].strip():
+                                new_set_name = row['set_name'].strip()
+                                if new_set_name != card.set_name:
+                                    card.set_name_override = new_set_name
+                                    updated_fields.append('set_name')
+
+                            # Gestion de l'override de la requete eBay
+                            if 'ebay_query' in row and row['ebay_query'].strip():
+                                new_ebay_query = row['ebay_query'].strip()
+                                card.ebay_query_override = new_ebay_query
+                                updated_fields.append('ebay_query')
+
+                            if updated_fields:
+                                # Regenerer la requete eBay seulement si pas d'override
+                                if 'ebay_query' not in updated_fields:
+                                    card.ebay_query = builder.build_query(card)
+                                card.updated_at = datetime.utcnow()
+                                results["updated"] += 1
+                                results["details"].append(f"Carte {card_id} mise a jour: {', '.join(updated_fields)}")
+
+                        else:
+                            # Mode creation
+                            set_id = row.get('set_id', '').strip()
+                            name = row.get('name', '').strip()
+                            local_id = row.get('local_id', '').strip()
+
+                            if not set_id or not name or not local_id:
+                                results["errors"].append(f"Ligne {row_num}: set_id, name et local_id requis pour creer une carte")
+                                continue
+
+                            # Determiner le variant
+                            variant_str = row.get('variant', 'NORMAL').strip().upper()
+                            try:
+                                variant = Variant[variant_str] if variant_str else Variant.NORMAL
+                            except KeyError:
+                                variant = Variant.NORMAL
+
+                            # Verifier si la carte existe deja
+                            tcgdex_id = f"{set_id}-{local_id}"
+                            if variant != Variant.NORMAL:
+                                tcgdex_id = f"{tcgdex_id}-{variant.value}"
+
+                            existing = session.query(Card).filter(Card.tcgdex_id == tcgdex_id).first()
+                            if existing:
+                                results["errors"].append(f"Ligne {row_num}: Carte {tcgdex_id} existe deja (ID: {existing.id})")
+                                continue
+
+                            # Recuperer le nom du set depuis la table sets
+                            set_name = row.get('set_name', '').strip()
+                            if not set_name:
+                                # Chercher dans la table sets
+                                set_obj = session.query(Set).filter(Set.id == set_id).first()
+                                if set_obj:
+                                    set_name = set_obj.name
+
+                            if not set_name:
+                                set_name = set_id  # Fallback
+
+                            # Creer la carte
+                            new_card = Card(
+                                tcgdex_id=tcgdex_id,
+                                set_id=set_id,
+                                local_id=local_id,
+                                name=name,
+                                set_name=set_name,
+                                variant=variant,
+                                is_active=True,
+                                created_at=datetime.utcnow(),
+                            )
+
+                            # Gestion de la requete eBay (override ou generee)
+                            if 'ebay_query' in row and row['ebay_query'].strip():
+                                new_card.ebay_query_override = row['ebay_query'].strip()
+                            else:
+                                new_card.ebay_query = builder.build_query(new_card)
+
+                            session.add(new_card)
+                            session.flush()  # Pour obtenir l'ID
+                            results["created"] += 1
+                            results["details"].append(f"Carte creee: {tcgdex_id} (ID: {new_card.id})")
+
+                    except Exception as e:
+                        results["errors"].append(f"Ligne {row_num}: {str(e)}")
+
+                session.commit()
+
+            return jsonify({
+                "success": True,
+                "message": f"{results['updated']} carte(s) mise(s) a jour, {results['created']} carte(s) creee(s)",
+                **results
+            })
+
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    # ===================
+    # TCGDEX SYNC
+    # ===================
+
+    @app.route("/tcgdex")
+    def tcgdex_sync():
+        """Page de synchronisation TCGdex."""
+        return render_template("tcgdex.html")
+
+    @app.route("/api/tcgdex/check-new-sets")
+    def api_tcgdex_check_new_sets():
+        """API: Verifier les nouveaux sets sur TCGdex."""
+        try:
+            client = TCGdexClient()
+            tcgdex_sets = client.get_sets()
+
+            with get_session() as session:
+                # Recuperer les set_id existants depuis la table sets
+                existing_set_ids = set(
+                    row[0] for row in session.query(Set.id).all()
+                )
+
+                # Recuperer les set_id qui ont des cartes (pour info)
+                imported_set_ids = set(
+                    row[0] for row in session.query(Card.set_id).distinct().all()
+                )
+
+            # Trouver les nouveaux sets (pas encore dans la table sets)
+            new_sets = []
+            for s in tcgdex_sets:
+                if s.id not in existing_set_ids:
+                    # Recuperer les details du set pour avoir le nombre de cartes
+                    set_details = client.get_set(s.id)
+                    new_sets.append({
+                        "id": s.id,
+                        "name": s.name,
+                        "card_count": set_details.card_count_total if set_details else None,
+                        "release_date": set_details.release_date if set_details else None,
+                        "already_imported": s.id in imported_set_ids,
+                    })
+
+            return jsonify({
+                "success": True,
+                "total_tcgdex_sets": len(tcgdex_sets),
+                "existing_sets": len(existing_set_ids),
+                "imported_sets": len(imported_set_ids),
+                "new_sets": new_sets,
+                "new_count": len(new_sets),
+            })
+
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/tcgdex/import-set/<set_id>", methods=["POST"])
+    def api_tcgdex_import_set(set_id: str):
+        """API: Importer un set depuis TCGdex."""
+        try:
+            with get_session() as session:
+                importer = TCGdexImporter(session)
+                stats = importer.import_set(set_id)
+                session.commit()
+
+                # Generer les requetes eBay pour les nouvelles cartes
+                builder = EbayQueryBuilder()
+                new_cards = session.query(Card).filter(
+                    Card.set_id == set_id,
+                    Card.ebay_query == None
+                ).all()
+
+                for card in new_cards:
+                    card.ebay_query = builder.build_query(card)
+                session.commit()
+
+                return jsonify({
+                    "success": True,
+                    "set_id": set_id,
+                    "cards_created": stats["created"],
+                    "cards_updated": stats["updated"],
+                    "queries_generated": len(new_cards),
+                })
+
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/tcgdex/series")
+    def api_tcgdex_series():
+        """API: Liste toutes les series avec leur statut (visible/masque)."""
+        from sqlalchemy import func
+
+        config = get_config()
+        excluded_series = set(config.tcgdex.excluded_series)
+
+        with get_session() as session:
+            # Recuperer toutes les series depuis la table sets
+            series_data = (
+                session.query(
+                    Set.serie_id,
+                    Set.serie_name,
+                    func.count(Set.id).label("set_count"),
+                    func.min(Set.release_date).label("first_date")
+                )
+                .group_by(Set.serie_id, Set.serie_name)
+                .order_by(func.min(Set.release_date))
+                .all()
+            )
+
+            # Compter les cartes par serie
+            cards_by_serie = dict(
+                session.query(
+                    Set.serie_id,
+                    func.count(Card.id)
+                )
+                .join(Card, Card.set_id == Set.id)
+                .group_by(Set.serie_id)
+                .all()
+            )
+
+            series = []
+            for s in series_data:
+                series.append({
+                    "serie_id": s.serie_id,
+                    "serie_name": s.serie_name,
+                    "set_count": s.set_count,
+                    "card_count": cards_by_serie.get(s.serie_id, 0),
+                    "is_visible": s.serie_id not in excluded_series,
+                    "first_date": str(s.first_date) if s.first_date else None,
+                })
+
+            return jsonify({
+                "success": True,
+                "series": series,
+                "excluded_count": len(excluded_series),
+            })
+
+    @app.route("/api/tcgdex/series/<serie_id>/toggle", methods=["POST"])
+    def api_tcgdex_toggle_serie(serie_id: str):
+        """API: Basculer la visibilite d'une serie."""
+        from src.config import reload_config
+        from pathlib import Path
+
+        config = get_config()
+        excluded = list(config.tcgdex.excluded_series)
+
+        if serie_id in excluded:
+            # Rendre visible
+            excluded.remove(serie_id)
+            is_visible = True
+        else:
+            # Masquer
+            excluded.append(serie_id)
+            is_visible = False
+
+        # Mettre a jour la config
+        config.tcgdex.excluded_series = excluded
+
+        # Sauvegarder dans config.yaml
+        config.save(Path("config.yaml"))
+
+        # Recharger la config
+        reload_config()
+
+        return jsonify({
+            "success": True,
+            "serie_id": serie_id,
+            "is_visible": is_visible,
+            "excluded_series": excluded,
+        })
+
+    @app.route("/api/tcgdex/sets")
+    def api_tcgdex_sets():
+        """API: Liste tous les sets avec leur statut (visible/masque)."""
+        from sqlalchemy import func
+
+        config = get_config()
+        excluded_series = set(config.tcgdex.excluded_series)
+        excluded_sets = set(config.tcgdex.excluded_sets)
+
+        with get_session() as session:
+            # Recuperer tous les sets avec le nombre de cartes
+            sets_data = (
+                session.query(
+                    Set.id,
+                    Set.name,
+                    Set.serie_id,
+                    Set.serie_name,
+                    Set.release_date,
+                    func.count(Card.id).label("card_count")
+                )
+                .outerjoin(Card, Card.set_id == Set.id)
+                .group_by(Set.id, Set.name, Set.serie_id, Set.serie_name, Set.release_date)
+                .order_by(Set.release_date)
+                .all()
+            )
+
+            sets = []
+            for s in sets_data:
+                # Un set est visible si:
+                # - Sa serie n'est pas exclue
+                # - Il n'est pas directement exclu
+                serie_hidden = s.serie_id in excluded_series
+                set_hidden = s.id in excluded_sets
+                is_visible = not serie_hidden and not set_hidden
+
+                sets.append({
+                    "set_id": s.id,
+                    "name": s.name,
+                    "serie_id": s.serie_id,
+                    "serie_name": s.serie_name,
+                    "card_count": s.card_count,
+                    "release_date": str(s.release_date) if s.release_date else None,
+                    "is_visible": is_visible,
+                    "hidden_by_serie": serie_hidden,
+                    "hidden_directly": set_hidden,
+                })
+
+            return jsonify({
+                "success": True,
+                "sets": sets,
+                "excluded_sets_count": len(excluded_sets),
+                "excluded_series_count": len(excluded_series),
+            })
+
+    @app.route("/api/tcgdex/sets/<set_id>/toggle", methods=["POST"])
+    def api_tcgdex_toggle_set(set_id: str):
+        """API: Basculer la visibilite d'un set individuel."""
+        from src.config import reload_config
+        from pathlib import Path
+
+        config = get_config()
+        excluded = list(config.tcgdex.excluded_sets)
+
+        if set_id in excluded:
+            # Rendre visible
+            excluded.remove(set_id)
+            is_visible = True
+        else:
+            # Masquer
+            excluded.append(set_id)
+            is_visible = False
+
+        # Mettre a jour la config
+        config.tcgdex.excluded_sets = excluded
+
+        # Sauvegarder dans config.yaml
+        config.save(Path("config.yaml"))
+
+        # Recharger la config
+        reload_config()
+
+        return jsonify({
+            "success": True,
+            "set_id": set_id,
+            "is_visible": is_visible,
+            "excluded_sets": excluded,
+        })
+
+    @app.route("/api/tcgdex/import-sets", methods=["POST"])
+    def api_tcgdex_import_sets():
+        """API: Importer plusieurs sets depuis TCGdex."""
+        data = request.get_json() or {}
+        set_ids = data.get("set_ids", [])
+
+        if not set_ids:
+            return jsonify({"success": False, "error": "set_ids requis"}), 400
+
+        results = {
+            "success": True,
+            "imported": [],
+            "errors": [],
+            "total_cards_created": 0,
+            "total_cards_updated": 0,
+        }
+
+        with get_session() as session:
+            importer = TCGdexImporter(session)
+            builder = EbayQueryBuilder()
+
+            for set_id in set_ids:
+                try:
+                    stats = importer.import_set(set_id)
+                    session.commit()
+
+                    # Generer les requetes eBay
+                    new_cards = session.query(Card).filter(
+                        Card.set_id == set_id,
+                        Card.ebay_query == None
+                    ).all()
+
+                    for card in new_cards:
+                        card.ebay_query = builder.build_query(card)
+                    session.commit()
+
+                    results["imported"].append({
+                        "set_id": set_id,
+                        "cards_created": stats["created"],
+                        "cards_updated": stats["updated"],
+                    })
+                    results["total_cards_created"] += stats["created"]
+                    results["total_cards_updated"] += stats["updated"]
+
+                except Exception as e:
+                    results["errors"].append({
+                        "set_id": set_id,
+                        "error": str(e),
+                    })
+                    session.rollback()
+
+        return jsonify(results)
 
     # ===================
     # VENTES DETECTEES
