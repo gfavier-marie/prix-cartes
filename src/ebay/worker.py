@@ -123,12 +123,12 @@ class EbayWorker:
             # L'utilisateur a defini une requete custom, on lui fait confiance
             has_query_override = card.ebay_query_override is not None
 
-            # Sets promo: pas de card_number_full (format X/Y n'existe pas sur les cartes physiques)
-            from ..ebay.query_builder import EbayQueryBuilder
-            is_promo_set = card.set_id in EbayQueryBuilder.PROMO_SETS
+            # Sets promo ou LOCAL_ONLY: pas de card_number_full a filtrer
+            from ..models import CardNumberFormat
+            is_promo_or_local_only = card.card_number_format in (CardNumberFormat.PROMO, CardNumberFormat.LOCAL_ONLY)
 
-            # Ne pas filtrer sur le numero si override ou set promo
-            if has_query_override or is_promo_set:
+            # Ne pas filtrer sur le numero si override ou set promo/local_only
+            if has_query_override or is_promo_or_local_only:
                 card_number_for_filter = None
                 card_number_full_for_filter = None
             else:

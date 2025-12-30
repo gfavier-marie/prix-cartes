@@ -61,6 +61,21 @@
                 <input type="text" id="set_name_override" name="set_name_override" value="{{ card.set_name_override or '' }}" placeholder="{{ card.set_name }}">
                 <span style="font-size: 11px; color: var(--text-muted);">TCGdex: {{ card.set_name }}</span>
             </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="card_count_official_override">Total officiel du set (override)</label>
+                <input type="text" id="card_count_official_override" name="card_count_official_override" value="{{ card.card_count_official_override or '' }}" placeholder="">
+                <span style="font-size: 11px; color: var(--text-muted);">Construit X/Y avec local_id. Ex: 102, H32</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="card_number_format">Format eBay</label>
+                <select id="card_number_format" name="card_number_format">
+                    <option value="">— Défaut (LOCAL_TOTAL) —</option>
+                    <option value="LOCAL_ONLY" {% if card.card_number_format and card.card_number_format.value == 'LOCAL_ONLY' %}selected{% endif %}>LOCAL_ONLY (25)</option>
+                    <option value="LOCAL_TOTAL" {% if card.card_number_format and card.card_number_format.value == 'LOCAL_TOTAL' %}selected{% endif %}>LOCAL_TOTAL (25/102)</option>
+                    <option value="PROMO" {% if card.card_number_format and card.card_number_format.value == 'PROMO' %}selected{% endif %}>PROMO (25 promo)</option>
+                </select>
+                <span style="font-size: 11px; color: var(--text-muted);">Actuel: {{ card.card_number_format.value if card.card_number_format else 'LOCAL_TOTAL' }}</span>
+            </div>
         </div>
         <div style="margin-top: 16px; display: flex; gap: 12px;">
             <button type="submit" class="btn btn-success" id="save-info-btn">Sauvegarder</button>
@@ -84,6 +99,8 @@ document.getElementById('card-info-form').addEventListener('submit', async funct
                 name_override: document.getElementById('name_override').value.trim() || null,
                 local_id_override: document.getElementById('local_id_override').value.trim() || null,
                 set_name_override: document.getElementById('set_name_override').value.trim() || null,
+                card_count_official_override: document.getElementById('card_count_official_override').value.trim() || null,
+                card_number_format: document.getElementById('card_number_format').value || null,
             })
         });
         const data = await response.json();
@@ -107,6 +124,8 @@ function resetOverrides() {
         document.getElementById('name_override').value = '';
         document.getElementById('local_id_override').value = '';
         document.getElementById('set_name_override').value = '';
+        document.getElementById('card_count_official_override').value = '';
+        document.getElementById('card_number_format').value = '';
         document.getElementById('card-info-form').dispatchEvent(new Event('submit'));
     }
 }

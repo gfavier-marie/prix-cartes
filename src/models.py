@@ -55,6 +55,13 @@ class BatchMode(PyEnum):
     HYBRID = "HYBRID"
 
 
+class CardNumberFormat(PyEnum):
+    """Format du numero de carte pour les requetes eBay."""
+    LOCAL_ONLY = "LOCAL_ONLY"      # Juste le numero: "25"
+    LOCAL_TOTAL = "LOCAL_TOTAL"    # Numero/Total: "25/102"
+    PROMO = "PROMO"                # Numero + promo: "25 promo"
+
+
 class Set(Base):
     """Table des sets Pokemon (extensions)."""
 
@@ -66,6 +73,7 @@ class Set(Base):
     serie_name = Column(String(200), nullable=False)  # ex: "Scarlet & Violet"
     release_date = Column(Date, nullable=True)
     card_count = Column(Integer, nullable=True)  # Nombre total de cartes
+    card_count_official = Column(Integer, nullable=True)  # Total officiel (ex: 147 pour Aquapolis)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -113,6 +121,8 @@ class Card(Base):
     local_id_override = Column(String(20), nullable=True)
     set_name_override = Column(String(200), nullable=True)
     card_number_full_override = Column(String(20), nullable=True)  # ex: "H01/H32"
+    card_count_official_override = Column(String(20), nullable=True)  # ex: "H32" pour les holos ecard
+    card_number_format = Column(Enum(CardNumberFormat), nullable=True)  # Format pour eBay query
 
     # Prix Cardmarket (via TCGdex)
     cm_trend = Column(Float, nullable=True)
@@ -177,8 +187,15 @@ class Card(Base):
 
     @property
     def effective_card_number_full(self) -> Optional[str]:
-        """Retourne le numero complet override s'il existe, sinon le numero TCGdex."""
-        return self.card_number_full_override or self.card_number_full
+        """Retourne le numero complet construit avec card_count_official_override si defini, sinon TCGdex."""
+        # Si card_count_official_override est defini, construire local_id/count
+        if self.card_count_official_override:
+            return f"{self.effective_local_id}/{self.card_count_official_override}"
+        # Sinon utiliser card_number_full_override si defini
+        if self.card_number_full_override:
+            return self.card_number_full_override
+        # Sinon valeur TCGdex
+        return self.card_number_full
 
     @property
     def has_overrides(self) -> bool:

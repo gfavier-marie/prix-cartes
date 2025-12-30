@@ -8,7 +8,7 @@ Syntaxe eBay Browse API:
 """
 
 from typing import Optional
-from ..models import Card, Variant
+from ..models import Card, Variant, CardNumberFormat
 
 
 class EbayQueryBuilder:
@@ -20,9 +20,6 @@ class EbayQueryBuilder:
         Variant.HOLO: "holo",
         Variant.FIRST_ED: "edition 1",
     }
-
-    # Sets promo (pas de /XXX sur les cartes physiques)
-    PROMO_SETS = {"svp", "swshp", "smp", "xyp", "bwp", "dpp", "basep", "mep", "P-A", "tk-xy-p"}
 
     def __init__(self, language: str = "fr", french_only: bool = True):
         """
@@ -37,11 +34,12 @@ class EbayQueryBuilder:
         """
         Construit la requete eBay pour une carte.
 
-        Format: [nom] [numero]/[total] [edition 1 si FIRST_ED]
-        Ex: Alakazam 1/102
-        Ex: Alakazam 1/102 edition 1 ed1
-        Max 100 caracteres.
+        Format depend de card_number_format:
+        - LOCAL_ONLY: [nom] [numero]
+        - LOCAL_TOTAL: [nom] [numero/total]
+        - PROMO: [nom] [numero] promo
 
+        Max 100 caracteres.
         Utilise les valeurs effectives (overrides si definis).
         """
         parts = []
@@ -50,33 +48,28 @@ class EbayQueryBuilder:
         name = self._clean_name(card.effective_name)
         parts.append(name)
 
-        # 2. Numero complet (1/102) ou juste le numero
-        # Utilise effective_local_id et effective_card_number_full pour les overrides
+        # 2. Numero de carte selon le format
         effective_local_id = card.effective_local_id
         effective_card_number_full = card.effective_card_number_full
-        # Pour les sets promo, utiliser juste le numero + "promo" (pas de /XXX sur les cartes physiques)
-        if card.set_id in self.PROMO_SETS:
+        card_format = card.card_number_format or CardNumberFormat.LOCAL_TOTAL
+
+        if card_format == CardNumberFormat.LOCAL_ONLY:
+            # Juste le numero
+            if effective_local_id:
+                parts.append(effective_local_id)
+
+        elif card_format == CardNumberFormat.PROMO:
+            # Numero + "promo"
             if effective_local_id:
                 parts.append(effective_local_id)
             parts.append("promo")
-        elif effective_card_number_full:
-            # Utiliser directement effective_card_number_full (qui gere les overrides)
-            # Corriger le padding si besoin
-            if card.card_number_full_override:
-                # Override defini, utiliser tel quel
-                card_number = effective_card_number_full
-            elif card.local_id_override:
-                # Reconstruire le numero complet avec l'override du local_id
-                total_part = effective_card_number_full.split("/")[-1] if "/" in effective_card_number_full else ""
-                if total_part:
-                    card_number = f"{effective_local_id}/{total_part}"
-                else:
-                    card_number = effective_local_id
-            else:
-                card_number = self._fix_card_number_padding(effective_card_number_full, card.local_id)
-            parts.append(card_number)
-        elif effective_local_id:
-            parts.append(effective_local_id)
+
+        else:  # LOCAL_TOTAL (defaut)
+            # Numero complet X/Y
+            if effective_card_number_full:
+                parts.append(effective_card_number_full)
+            elif effective_local_id:
+                parts.append(effective_local_id)
 
         # 3. Seulement Edition 1 (pas holo, pas reverse, pas normal)
         if card.variant == Variant.FIRST_ED:
@@ -90,51 +83,6 @@ class EbayQueryBuilder:
             query = self._truncate_query(query)
 
         return query
-
-    def _fix_card_number_padding(self, card_number_full: str, local_id: str) -> str:
-        """
-        Corrige le padding du numero de carte si necessaire.
-
-        Detecte la largeur du padding depuis le local_id:
-        - Si local_id commence par 0 (ex: "092"), utilise cette largeur
-        - Sinon, deduit la largeur depuis la longueur du local_id
-          (ex: pour un set 94 cartes avec local_id="102", le padding est 3)
-
-        Ex: "092/94" -> "092/094"
-        Ex: "102/94" -> "102/094" (si le set utilise des numeros a 3 chiffres)
-        """
-        if not local_id:
-            return card_number_full
-
-        # Parser le format "XXX/YYY"
-        if "/" not in card_number_full:
-            return card_number_full
-
-        parts = card_number_full.split("/")
-        if len(parts) != 2:
-            return card_number_full
-
-        num, total = parts
-
-        # Determiner la largeur du padding
-        # Si local_id commence par 0, utilise sa longueur
-        # Sinon, compare: si len(local_id) > len(total), c'est qu'il y a du padding
-        if local_id.startswith("0"):
-            padding_width = len(local_id)
-        elif len(num) > len(total):
-            # Le numero est plus long que le total -> padding manquant sur le total
-            padding_width = len(num)
-        else:
-            # Pas de padding necessaire
-            return card_number_full
-
-        # Padder le total avec des zeros
-        try:
-            total_int = int(total)
-            total_padded = str(total_int).zfill(padding_width)
-            return f"{num}/{total_padded}"
-        except ValueError:
-            return card_number_full
 
     def _clean_name(self, name: str) -> str:
         """Nettoie le nom de la carte."""

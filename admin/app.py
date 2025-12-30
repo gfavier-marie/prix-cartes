@@ -9,7 +9,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 import csv
 import io
 
-from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage, SoldListing, Set
+from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage, SoldListing, Set, CardNumberFormat
 from src.database import get_session, init_db
 from src.config import get_config
 from src.batch import BatchRunner
@@ -747,6 +747,18 @@ def create_app() -> Flask:
             card.name_override = data.get("name_override") or None
             card.local_id_override = data.get("local_id_override") or None
             card.set_name_override = data.get("set_name_override") or None
+            card.card_count_official_override = data.get("card_count_official_override") or None
+
+            # card_number_format: convertir string en enum ou None
+            card_number_format_str = data.get("card_number_format")
+            if card_number_format_str:
+                try:
+                    card.card_number_format = CardNumberFormat(card_number_format_str)
+                except ValueError:
+                    card.card_number_format = None
+            else:
+                card.card_number_format = None
+
             card.updated_at = datetime.utcnow()
 
             # Regenerer la requete eBay avec les nouvelles valeurs
@@ -764,9 +776,12 @@ def create_app() -> Flask:
                     "name_override": card.name_override,
                     "local_id_override": card.local_id_override,
                     "set_name_override": card.set_name_override,
+                    "card_count_official_override": card.card_count_official_override,
+                    "card_number_format": card.card_number_format.value if card.card_number_format else None,
                     "effective_name": card.effective_name,
                     "effective_local_id": card.effective_local_id,
                     "effective_set_name": card.effective_set_name,
+                    "effective_card_number_full": card.effective_card_number_full,
                     "ebay_query": card.ebay_query,
                 }
             })
@@ -1190,17 +1205,19 @@ def create_app() -> Flask:
         writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
 
         # Header avec toutes les colonnes
-        writer.writerow(['id', 'name', 'local_id', 'set_name', 'set_id', 'variant', 'ebay_query'])
+        writer.writerow(['id', 'name', 'local_id', 'set_name', 'set_id', 'set_cardcount_official', 'variant', 'card_number_format', 'ebay_query'])
 
         # Exemples commentes
-        writer.writerow(['# Modification: remplir id, les autres colonnes sont optionnelles', '', '', '', '', '', ''])
-        writer.writerow(['# Exemple modification:', '', '', '', '', '', ''])
-        writer.writerow(['123', 'Pikachu', '25', '', '', '', ''])
-        writer.writerow(['123', '', '', '', '', '', 'Pikachu 25/102 pokemon'])
-        writer.writerow(['# Creation: laisser id vide, remplir name, local_id, set_id obligatoires', '', '', '', '', '', ''])
-        writer.writerow(['# Exemple creation:', '', '', '', '', '', ''])
-        writer.writerow(['', 'Ma Nouvelle Carte', '001', '', 'sv08', 'NORMAL', ''])
-        writer.writerow(['', 'Carte Reverse', '002', '', 'sv08', 'REVERSE', 'Carte Reverse 002 pokemon'])
+        writer.writerow(['# Modification: remplir id, les autres colonnes sont optionnelles', '', '', '', '', '', '', '', ''])
+        writer.writerow(['# Exemple modification:', '', '', '', '', '', '', '', ''])
+        writer.writerow(['123', 'Pikachu', '25', '', '', '', '', '', ''])
+        writer.writerow(['ecard2-H01-HOLO', '', 'H01', '', '', 'H32', '', 'LOCAL_ONLY', ''])
+        writer.writerow(['svp-001-NORMAL', '', '', '', '', '', '', 'PROMO', ''])
+        writer.writerow(['# Creation: laisser id vide, remplir name, local_id, set_id obligatoires', '', '', '', '', '', '', '', ''])
+        writer.writerow(['# Exemple creation:', '', '', '', '', '', '', '', ''])
+        writer.writerow(['', 'Ma Nouvelle Carte', '001', '', 'sv08', '', 'NORMAL', 'LOCAL_TOTAL', ''])
+        writer.writerow(['', 'Carte Promo', '002', '', 'svp', '', 'NORMAL', 'PROMO', ''])
+        writer.writerow(['', 'Carte Reverse', '003', '', 'sv08', '', 'REVERSE', '', 'Carte Reverse 003 pokemon'])
 
         output.seek(0)
         csv_content = '\ufeff' + output.getvalue()
@@ -1215,7 +1232,7 @@ def create_app() -> Flask:
     @app.route("/api/cards/import-csv", methods=["POST"])
     def api_import_csv():
         """API: Importer des cartes depuis un fichier CSV."""
-        from src.models import Variant
+        from src.models import Variant, CardNumberFormat
 
         if 'file' not in request.files:
             return jsonify({"success": False, "error": "Aucun fichier envoye"}), 400
@@ -1291,11 +1308,19 @@ def create_app() -> Flask:
                                 set_cardcount = row['set_id'].strip()
 
                             if set_cardcount:
-                                # Utiliser local_id_override si defini dans cette ligne ou sur la carte
-                                # sinon utiliser local_id original
-                                effective_local = row.get('local_id', '').strip() or card.local_id_override or card.local_id
-                                card.card_number_full_override = f"{effective_local}/{set_cardcount}"
-                                updated_fields.append('card_number_full')
+                                # Stocker le total officiel du set dans card_count_official_override
+                                # La propriete effective_card_number_full construira automatiquement X/Y
+                                card.card_count_official_override = set_cardcount
+                                updated_fields.append('card_count_official')
+
+                            # Gestion de card_number_format
+                            if 'card_number_format' in row and row['card_number_format'].strip():
+                                format_str = row['card_number_format'].strip().upper()
+                                try:
+                                    card.card_number_format = CardNumberFormat[format_str]
+                                    updated_fields.append('card_number_format')
+                                except KeyError:
+                                    results["errors"].append(f"Ligne {row_num}: card_number_format invalide: {format_str}")
 
                             if updated_fields:
                                 # Regenerer la requete eBay seulement si pas d'override
@@ -1354,6 +1379,17 @@ def create_app() -> Flask:
                                 is_active=True,
                                 created_at=datetime.utcnow(),
                             )
+
+                            # Gestion de card_number_format pour creation
+                            if 'card_number_format' in row and row['card_number_format'].strip():
+                                format_str = row['card_number_format'].strip().upper()
+                                try:
+                                    new_card.card_number_format = CardNumberFormat[format_str]
+                                except KeyError:
+                                    new_card.card_number_format = CardNumberFormat.LOCAL_TOTAL
+                                    results["errors"].append(f"Ligne {row_num}: card_number_format invalide '{format_str}', utilise LOCAL_TOTAL")
+                            else:
+                                new_card.card_number_format = CardNumberFormat.LOCAL_TOTAL
 
                             # Gestion de la requete eBay (override ou generee)
                             if 'ebay_query' in row and row['ebay_query'].strip():

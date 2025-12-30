@@ -39,22 +39,25 @@
             <tr><td><code>set_id</code></td><td>ID du set (pour creation)</td></tr>
             <tr><td><code>set_cardcount_official</code></td><td>Total officiel du set (ex: H32) - construit card_number_full</td></tr>
             <tr><td><code>variant</code></td><td>NORMAL, REVERSE, HOLO, FIRST_ED</td></tr>
+            <tr><td><code>card_number_format</code></td><td>Format eBay: LOCAL_ONLY (25), LOCAL_TOTAL (25/102), PROMO (25 promo)</td></tr>
             <tr><td><code>ebay_query</code></td><td>Requete eBay personnalisee (override)</td></tr>
         </table>
 
         <h3 style="font-size: 14px; margin-bottom: 8px;">Mode modification (id renseigne) :</h3>
-        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_name;set_cardcount_official;ebay_query
-123;Pikachu;25;;;
-456;Dracaufeu;4;Set de Base;;Dracaufeu 4/102 pokemon
-ecard2-H01-HOLO;;H01;;H32;</div>
+        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_name;set_cardcount_official;card_number_format;ebay_query
+123;Pikachu;25;;;;
+456;Dracaufeu;4;Set de Base;;;Dracaufeu 4/102 pokemon
+ecard2-H01-HOLO;;H01;;H32;LOCAL_ONLY;
+svp-001-NORMAL;;;;PROMO;</div>
         <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
             <code>set_cardcount_official</code> construit card_number_full_override (ex: H01 + H32 = H01/H32)
         </p>
 
         <h3 style="font-size: 14px; margin-bottom: 8px;">Mode creation (id vide) :</h3>
-        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_id;variant;ebay_query
-;Ma Carte;001;sv08;NORMAL;
-;Autre Carte;002;sv08;REVERSE;Ma requete eBay custom</div>
+        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_id;variant;card_number_format;ebay_query
+;Ma Carte;001;sv08;NORMAL;LOCAL_TOTAL;
+;Carte Promo;002;svp;NORMAL;PROMO;
+;Autre Carte;003;sv08;REVERSE;;Ma requete eBay custom</div>
 
         <p style="color: var(--text-secondary); font-size: 13px;">
             Pour trouver les <code>set_id</code> valides,
