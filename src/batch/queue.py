@@ -247,6 +247,12 @@ class BatchQueue:
 
         finally:
             item.finished_at = datetime.utcnow()
+            # Rafraichir les rate limits eBay
+            try:
+                from ..ebay.usage_tracker import refresh_rate_limits_from_ebay
+                refresh_rate_limits_from_ebay()
+            except Exception:
+                pass
 
 
 # Instance globale

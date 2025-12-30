@@ -371,3 +371,45 @@ class ApiUsage(Base):
 
     def __repr__(self) -> str:
         return f"<ApiUsage {self.api_name} {self.usage_date}: {self.call_count}/{self.daily_limit}>"
+
+
+class SoldListing(Base):
+    """Annonces eBay disparues (probablement vendues)."""
+
+    __tablename__ = "sold_listings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    card_id = Column(Integer, ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+
+    # Infos eBay
+    item_id = Column(String(100), nullable=False, index=True)  # ID unique eBay
+    title = Column(String(500), nullable=True)
+    price = Column(Float, nullable=True)
+    effective_price = Column(Float, nullable=True)  # Prix + port
+    currency = Column(String(3), default="EUR")
+    url = Column(Text, nullable=True)
+    seller = Column(String(100), nullable=True)
+    image_url = Column(Text, nullable=True)
+    condition = Column(String(50), nullable=True)
+    listing_date = Column(String(50), nullable=True)  # Date de mise en ligne
+
+    # Tracking
+    first_seen_at = Column(DateTime, nullable=True)  # Premier snapshot ou vu
+    last_seen_at = Column(DateTime, nullable=True)   # Dernier snapshot ou vu
+    detected_sold_at = Column(DateTime, default=datetime.utcnow, nullable=False)  # Quand disparu
+
+    # Type (normal ou reverse)
+    is_reverse = Column(Boolean, default=False, nullable=False)
+
+    # Relations
+    card = relationship("Card")
+
+    # Index
+    __table_args__ = (
+        Index("ix_sold_listings_card", "card_id"),
+        Index("ix_sold_listings_detected", "detected_sold_at"),
+        Index("ix_sold_listings_item", "item_id", unique=True),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SoldListing {self.item_id}: {self.effective_price}€>"

@@ -3,13 +3,18 @@ Tracker d'utilisation de l'API eBay.
 Permet de suivre le nombre d'appels quotidiens et de les comparer a la limite.
 """
 
-from datetime import date
+import json
+import os
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from ..models import ApiUsage
 from ..config import get_config
+
+# Fichier cache pour les rate limits eBay
+RATE_LIMITS_CACHE_FILE = os.path.join(os.path.dirname(__file__), "../../data/ebay_rate_limits.json")
 
 
 class EbayUsageTracker:
@@ -106,13 +111,16 @@ def get_ebay_usage_summary(session: Session) -> dict:
     Retourne un resume de l'utilisation eBay.
 
     Returns:
-        Dict avec: today_count, daily_limit, remaining, percent, history
+        Dict avec: today_count, daily_limit, remaining, percent, history, reset
     """
     tracker = EbayUsageTracker(session)
     today = tracker.get_today_usage()
     history = tracker.get_history(7)
 
-    return {
+    # Recuperer les rate limits depuis le cache
+    rate_limits = get_cached_rate_limits()
+
+    result = {
         "today_count": today.call_count,
         "daily_limit": today.daily_limit,
         "remaining": today.remaining,
@@ -128,3 +136,68 @@ def get_ebay_usage_summary(session: Session) -> dict:
             for h in history
         ]
     }
+
+    # Ajouter les infos eBay si disponibles
+    if rate_limits:
+        result["ebay_count"] = rate_limits.get("count")
+        result["ebay_limit"] = rate_limits.get("limit")
+        result["ebay_remaining"] = rate_limits.get("remaining")
+        result["ebay_reset"] = rate_limits.get("reset")
+        result["ebay_reset_formatted"] = rate_limits.get("reset_formatted")
+        result["cached_at"] = rate_limits.get("cached_at")
+
+    return result
+
+
+def save_rate_limits(rate_limits: dict) -> None:
+    """Sauvegarde les rate limits dans le cache."""
+    if not rate_limits:
+        return
+
+    # Formatter la date de reset pour affichage
+    reset_formatted = None
+    if rate_limits.get("reset"):
+        try:
+            reset_dt = datetime.fromisoformat(rate_limits["reset"].replace("Z", "+00:00"))
+            reset_formatted = reset_dt.strftime("%d/%m %H:%M")
+        except Exception:
+            pass
+
+    data = {
+        **rate_limits,
+        "reset_formatted": reset_formatted,
+        "cached_at": datetime.now().isoformat(),
+    }
+
+    try:
+        os.makedirs(os.path.dirname(RATE_LIMITS_CACHE_FILE), exist_ok=True)
+        with open(RATE_LIMITS_CACHE_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+
+def get_cached_rate_limits() -> Optional[dict]:
+    """Recupere les rate limits depuis le cache."""
+    try:
+        if os.path.exists(RATE_LIMITS_CACHE_FILE):
+            with open(RATE_LIMITS_CACHE_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
+def refresh_rate_limits_from_ebay() -> Optional[dict]:
+    """Appelle l'API eBay pour rafraichir les rate limits."""
+    from .client import EbayClient
+
+    try:
+        client = EbayClient()
+        rate_limits = client.get_rate_limits()
+        if rate_limits:
+            save_rate_limits(rate_limits)
+            return rate_limits
+    except Exception:
+        pass
+    return None

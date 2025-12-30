@@ -133,12 +133,13 @@ function toggleDateInputs() {
                 <th>Disp.</th>
                 <th>Âge</th>
                 <th>Maj</th>
+                <th>Ventes</th>
                 <th>Erreur</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
-            {% for card, snapshot in cards %}
+            {% for card, snapshot, sold_count in cards %}
             <tr>
                 <td style="width: 50px; padding: 4px;">
                     <img src="{{ card.image_url }}" alt="{{ card.name }}" style="height: 50px; border-radius: 3px;" loading="lazy" onerror="this.style.display='none'">
@@ -217,6 +218,13 @@ function toggleDateInputs() {
                 <td>
                     {% if snapshot and snapshot.as_of_date %}
                         <span class="text-secondary" style="font-size: 12px;">{{ snapshot.as_of_date.strftime('%d/%m/%y') }}</span>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if sold_count %}
+                        <span class="badge badge-ok" style="font-size: 11px;">{{ sold_count }}</span>
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}

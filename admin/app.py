@@ -10,7 +10,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 import csv
 import io
 
-from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage
+from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage, SoldListing
 from src.database import get_session, init_db
 from src.config import get_config
 from src.batch import BatchRunner
@@ -126,10 +126,22 @@ def create_app() -> Flask:
                 func.max(MarketSnapshot.id).label('max_id')
             ).group_by(MarketSnapshot.card_id).subquery()
 
-            query = session.query(Card, MarketSnapshot).outerjoin(
+            # Subquery pour le nombre de ventes par carte
+            sold_count_subq = session.query(
+                SoldListing.card_id,
+                func.count(SoldListing.id).label('sold_count')
+            ).group_by(SoldListing.card_id).subquery()
+
+            query = session.query(
+                Card,
+                MarketSnapshot,
+                sold_count_subq.c.sold_count
+            ).outerjoin(
                 latest_snapshot_id, Card.id == latest_snapshot_id.c.card_id
             ).outerjoin(
                 MarketSnapshot, MarketSnapshot.id == latest_snapshot_id.c.max_id
+            ).outerjoin(
+                sold_count_subq, Card.id == sold_count_subq.c.card_id
             ).filter(Card.is_active == True)
 
             # Filtres
@@ -235,10 +247,88 @@ def create_app() -> Flask:
                 MarketSnapshot.card_id == card_id
             ).order_by(MarketSnapshot.as_of_date.desc()).limit(10).all()
 
+            # Ventes detectees pour cette carte
+            sold_listings_raw = session.query(SoldListing).filter(
+                SoldListing.card_id == card_id
+            ).order_by(SoldListing.detected_sold_at.desc()).limit(50).all()
+
+            # Calculer les stats des ventes et la duree pour chaque vente
+            sold_stats = None
+            sold_listings = []
+            if sold_listings_raw:
+                import numpy as np
+                from datetime import datetime as dt
+
+                prices = [s.effective_price for s in sold_listings_raw if s.effective_price]
+
+                # Calculer la duree pour chaque vente
+                durations = []
+                for s in sold_listings_raw:
+                    duration_days = None
+                    if s.listing_date and s.detected_sold_at:
+                        try:
+                            # listing_date peut etre string ou datetime
+                            if isinstance(s.listing_date, str):
+                                listing_dt = dt.fromisoformat(s.listing_date.replace('Z', '+00:00'))
+                            else:
+                                listing_dt = s.listing_date
+                            # Rendre offset-naive si necessaire
+                            detected_dt = s.detected_sold_at
+                            if listing_dt.tzinfo is not None:
+                                listing_dt = listing_dt.replace(tzinfo=None)
+                            duration_days = (detected_dt - listing_dt).days
+                            if duration_days >= 0:
+                                durations.append(duration_days)
+                            else:
+                                duration_days = None
+                        except (ValueError, TypeError):
+                            pass
+                    # Creer un dict avec les donnees + duration_days
+                    sold_listings.append({
+                        'id': s.id,
+                        'title': s.title,
+                        'price': s.price,
+                        'effective_price': s.effective_price,
+                        'image_url': s.image_url,
+                        'url': s.url,
+                        'seller': s.seller,
+                        'condition': s.condition,
+                        'is_reverse': s.is_reverse,
+                        'detected_sold_at': s.detected_sold_at,
+                        'listing_date': s.listing_date,
+                        'duration_days': duration_days,
+                    })
+
+                if prices:
+                    prices_arr = np.array(prices)
+                    sold_stats = {
+                        'count': len(prices),
+                        'p10': float(np.percentile(prices_arr, 10)),
+                        'p20': float(np.percentile(prices_arr, 20)),
+                        'p50': float(np.percentile(prices_arr, 50)),
+                        'p80': float(np.percentile(prices_arr, 80)),
+                        'p90': float(np.percentile(prices_arr, 90)),
+                    }
+
+                    # Dispersion et CV
+                    if sold_stats['p20'] > 0:
+                        sold_stats['dispersion'] = sold_stats['p80'] / sold_stats['p20']
+                    mean = float(np.mean(prices_arr))
+                    std = float(np.std(prices_arr))
+                    if mean > 0:
+                        sold_stats['cv'] = std / mean
+
+                    # Duree moyenne de vente
+                    if durations:
+                        sold_stats['avg_duration_days'] = float(np.mean(durations))
+                        sold_stats['median_duration_days'] = float(np.median(durations))
+
             return render_template("card_detail.html",
                 card=card,
                 buy_price=buy_price,
                 snapshots=snapshots,
+                sold_listings=sold_listings,
+                sold_stats=sold_stats,
                 back_url=back_url,
                 list_params=list_params,
             )
@@ -634,6 +724,15 @@ def create_app() -> Flask:
             summary = get_ebay_usage_summary(session)
             return jsonify(summary)
 
+    @app.route("/api/usage/ebay/refresh", methods=["POST"])
+    def api_ebay_usage_refresh():
+        """API: Rafraichir les rate limits depuis eBay."""
+        from src.ebay.usage_tracker import refresh_rate_limits_from_ebay
+        rate_limits = refresh_rate_limits_from_ebay()
+        if rate_limits:
+            return jsonify({"success": True, **rate_limits})
+        return jsonify({"success": False, "error": "Impossible de recuperer les rate limits"}), 500
+
     @app.route("/api/cards/<int:card_id>")
     def api_card(card_id: int):
         """API: detail carte en JSON."""
@@ -852,6 +951,47 @@ def create_app() -> Flask:
                 'Content-Disposition': f'attachment; filename=prix_cartes_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
             }
         )
+
+    # ===================
+    # VENTES DETECTEES
+    # ===================
+
+    @app.route("/ventes")
+    def sold_listings():
+        """Liste des annonces disparues (probablement vendues)."""
+        from sqlalchemy import func
+
+        page = request.args.get('page', 1, type=int)
+        per_page = 50
+
+        with get_session() as session:
+            # Total count
+            total = session.query(SoldListing).count()
+
+            # Get paginated results with card info
+            listings = session.query(SoldListing, Card).join(
+                Card, SoldListing.card_id == Card.id
+            ).order_by(
+                SoldListing.detected_sold_at.desc()
+            ).offset((page - 1) * per_page).limit(per_page).all()
+
+            # Stats
+            stats = {
+                'total': total,
+                'total_value': session.query(
+                    func.sum(SoldListing.effective_price)
+                ).scalar() or 0
+            }
+
+            return render_template(
+                "ventes.html",
+                listings=listings,
+                stats=stats,
+                page=page,
+                per_page=per_page,
+                total=total,
+                total_pages=(total + per_page - 1) // per_page
+            )
 
     return app
 

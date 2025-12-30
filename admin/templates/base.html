@@ -589,13 +589,14 @@
             <div class="nav-links">
                 <a href="{{ url_for('cards_list') }}">Cartes</a>
                 <a href="{{ url_for('anomalies') }}">Anomalies</a>
+                <a href="{{ url_for('sold_listings') }}">Ventes</a>
                 <a href="{{ url_for('batches') }}">Batches</a>
                 <a href="{{ url_for('batch_launcher') }}">Lancer batch</a>
             </div>
             <div class="nav-right">
-                <div id="api-usage" class="api-usage" title="Appels API eBay aujourd'hui">
-                    <span class="api-count">-</span>
-                    <span class="api-label">API</span>
+                <div id="api-usage" class="api-usage" title="Cliquer pour rafraichir" style="cursor: pointer;" onclick="refreshApiUsage()">
+                    <span class="api-count">-</span>/<span class="api-limit">-</span>
+                    <span class="api-reset" style="margin-left: 4px; font-size: 10px;"></span>
                 </div>
                 <button class="theme-toggle" onclick="toggleTheme()">
                     <span class="icon" id="theme-icon">🌙</span>
@@ -642,13 +643,34 @@
             fetch('/api/usage/ebay')
                 .then(r => r.json())
                 .then(data => {
-                    const el = document.querySelector('#api-usage .api-count');
-                    if (el && data.today_count !== undefined) {
-                        el.textContent = data.today_count;
+                    const countEl = document.querySelector('#api-usage .api-count');
+                    const limitEl = document.querySelector('#api-usage .api-limit');
+                    const resetEl = document.querySelector('#api-usage .api-reset');
+
+                    // Utiliser les donnees eBay si disponibles, sinon local
+                    const count = data.ebay_count !== undefined ? data.ebay_count : data.today_count;
+                    const limit = data.ebay_limit !== undefined ? data.ebay_limit : data.daily_limit;
+
+                    if (countEl) countEl.textContent = count || '-';
+                    if (limitEl) limitEl.textContent = limit || '-';
+                    if (resetEl && data.ebay_reset_formatted) {
+                        resetEl.textContent = 'Reset ' + data.ebay_reset_formatted;
                     }
                 })
                 .catch(() => {});
         }
+
+        // Refresh depuis l'API eBay (clic sur le compteur)
+        function refreshApiUsage() {
+            const el = document.getElementById('api-usage');
+            el.style.opacity = '0.5';
+            fetch('/api/usage/ebay/refresh', { method: 'POST' })
+                .then(r => r.json())
+                .then(() => updateApiUsage())
+                .catch(() => {})
+                .finally(() => { el.style.opacity = '1'; });
+        }
+
         updateApiUsage();
         setInterval(updateApiUsage, 30000);  // Refresh every 30s
     </script>

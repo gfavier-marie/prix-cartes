@@ -13,7 +13,7 @@ from rich.progress import Progress, TaskID, SpinnerColumn, TextColumn, BarColumn
 
 from sqlalchemy.orm import Session
 
-from ..models import Card, MarketSnapshot, BatchRun, BatchMode, AnchorSource, ApiUsage
+from ..models import Card, MarketSnapshot, BatchRun, BatchMode, AnchorSource, ApiUsage, Variant
 from ..database import get_session, get_db_session
 from ..config import get_config
 from ..ebay import EbayQueryBuilder, EbayWorker
@@ -299,6 +299,13 @@ class BatchRunner:
                 card.last_error_at = None
                 # Creer le snapshot depuis les donnees eBay
                 snapshot = self.worker.create_snapshot(card, result, as_of, items=result.items)
+
+                # Detecter les ventes (annonces disparues)
+                if previous_snapshot:
+                    self.worker.detect_sold_listings(session, card, snapshot, previous_snapshot, is_reverse=False)
+                    # Aussi pour les reverse si applicable
+                    if card.variant != Variant.REVERSE:
+                        self.worker.detect_sold_listings(session, card, snapshot, previous_snapshot, is_reverse=True)
 
                 # Appliquer les garde-fous
                 guardrail_result = self.guardrails.apply_to_snapshot(snapshot, card)

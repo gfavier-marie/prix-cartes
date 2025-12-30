@@ -469,7 +469,7 @@ class EbayWorker:
                     "image": item.image_url,
                     "listing_date": item.listing_date,
                 }
-                for item in items[:50]  # Limiter a 50 pour ne pas exploser la DB
+                for item in items[:100]  # Limiter a 100 pour tracking ventes
             ]
 
         # Stocker les annonces reverse separement
@@ -488,9 +488,101 @@ class EbayWorker:
                     "image": item.image_url,
                     "listing_date": item.listing_date,
                 }
-                for item in result.reverse_items[:50]
+                for item in result.reverse_items[:100]
             ]
 
         snapshot.set_raw_meta(meta)
 
         return snapshot
+
+    def detect_sold_listings(
+        self,
+        session,
+        card: Card,
+        new_snapshot: MarketSnapshot,
+        previous_snapshot: Optional[MarketSnapshot],
+        is_reverse: bool = False,
+        verify_via_api: bool = True
+    ) -> list["SoldListing"]:
+        """
+        Detecte les annonces disparues entre deux snapshots.
+
+        Verifie via l'API eBay si l'annonce a reellement ete vendue
+        (et non simplement terminee manuellement).
+
+        Args:
+            session: Session SQLAlchemy
+            card: La carte concernee
+            new_snapshot: Le nouveau snapshot
+            previous_snapshot: Le snapshot precedent (peut etre None)
+            is_reverse: True si on compare les listings reverse
+            verify_via_api: Si True, verifie le statut via l'API eBay
+
+        Returns:
+            Liste des SoldListing creees
+        """
+        from ..models import SoldListing
+
+        if not previous_snapshot:
+            return []
+
+        # Extraire les listings des deux snapshots
+        key = "reverse_listings" if is_reverse else "listings"
+        old_meta = previous_snapshot.get_raw_meta()
+        new_meta = new_snapshot.get_raw_meta()
+
+        old_listings = old_meta.get(key, [])
+        new_listings = new_meta.get(key, [])
+
+        if not old_listings:
+            return []
+
+        # Creer un set des item_id actuels
+        current_ids = {item.get("item_id") for item in new_listings if item.get("item_id")}
+
+        # Trouver les disparus
+        sold = []
+        for listing in old_listings:
+            item_id = listing.get("item_id")
+            if not item_id or item_id in current_ids:
+                continue
+
+            # Verifier si deja enregistre
+            existing = session.query(SoldListing).filter(
+                SoldListing.item_id == item_id
+            ).first()
+
+            if existing:
+                continue
+
+            # Verifier via API si reellement vendue
+            if verify_via_api:
+                status_info = self.client.get_item_status(item_id)
+                status = status_info.get("status")
+
+                # Ne creer que si vraiment vendue (OUT_OF_STOCK + soldQuantity > 0)
+                if status != "SOLD":
+                    # Annonce terminee manuellement, supprimee ou erreur - on ignore
+                    continue
+
+            # Creer l'enregistrement
+            sold_listing = SoldListing(
+                card_id=card.id,
+                item_id=item_id,
+                title=listing.get("title"),
+                price=listing.get("price"),
+                effective_price=listing.get("effective_price"),
+                currency=listing.get("currency", "EUR"),
+                url=listing.get("url"),
+                seller=listing.get("seller"),
+                image_url=listing.get("image"),
+                condition=listing.get("condition"),
+                listing_date=listing.get("listing_date"),
+                first_seen_at=previous_snapshot.created_at,
+                last_seen_at=previous_snapshot.created_at,
+                is_reverse=is_reverse,
+            )
+            session.add(sold_listing)
+            sold.append(sold_listing)
+
+        return sold

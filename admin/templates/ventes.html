@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Ventes detectees{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Ventes detectees</h1>
+    <p>Annonces eBay disparues entre deux snapshots (probablement vendues)</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-box accent-green">
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Ventes detectees</div>
+    </div>
+    <div class="stat-box accent-blue">
+        <div class="stat-value">{{ "%.2f"|format(stats.total_value) }} EUR</div>
+        <div class="stat-label">Valeur totale</div>
+    </div>
+</div>
+
+<div class="card">
+    {% if listings %}
+    <table>
+        <thead>
+            <tr>
+                <th>Image</th>
+                <th>Carte</th>
+                <th>Annonce eBay</th>
+                <th>Prix</th>
+                <th>Vendeur</th>
+                <th>Detectee le</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sold, card in listings %}
+            <tr>
+                <td>
+                    {% if sold.image_url %}
+                    <img src="{{ sold.image_url }}" alt="" style="height: 50px; border-radius: 4px;">
+                    {% else %}
+                    <img src="{{ card.image_url }}" alt="" style="height: 50px; border-radius: 4px;">
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="card-name">
+                        <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link">{{ card.name }}</a>
+                    </div>
+                    <div class="card-meta">
+                        {{ card.set_name }} - {{ card.local_id }}
+                        {% if sold.is_reverse %}<span class="badge badge-low" style="margin-left: 4px;">REVERSE</span>{% endif %}
+                    </div>
+                </td>
+                <td>
+                    <div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ sold.title }}">
+                        {{ sold.title or '-' }}
+                    </div>
+                    <div class="card-meta">{{ sold.condition or '-' }}</div>
+                </td>
+                <td>
+                    <span class="price price-main">{{ "%.2f"|format(sold.effective_price or 0) }} EUR</span>
+                    {% if sold.price and sold.effective_price and sold.effective_price != sold.price %}
+                    <div class="card-meta">Base: {{ "%.2f"|format(sold.price) }} EUR</div>
+                    {% endif %}
+                </td>
+                <td>
+                    <span class="text-secondary">{{ sold.seller or '-' }}</span>
+                </td>
+                <td>
+                    <span class="text-secondary">{{ sold.detected_sold_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                    {% if sold.first_seen_at %}
+                    <div class="card-meta">Vue: {{ sold.first_seen_at.strftime('%d/%m') }}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="actions">
+                        {% if sold.url %}
+                        <a href="{{ sold.url }}" target="_blank" class="btn btn-ghost btn-sm">eBay</a>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="{{ url_for('sold_listings', page=page-1) }}">Precedent</a>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+            <a href="#" class="active">{{ p }}</a>
+            {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+            <a href="{{ url_for('sold_listings', page=p) }}">{{ p }}</a>
+            {% elif p == 4 or p == total_pages - 2 %}
+            <span style="padding: 0 8px;">...</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if page < total_pages %}
+        <a href="{{ url_for('sold_listings', page=page+1) }}">Suivant</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <p>Aucune vente detectee pour le moment.</p>
+        <p class="text-muted" style="margin-top: 8px;">Les ventes seront detectees lors du prochain batch.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

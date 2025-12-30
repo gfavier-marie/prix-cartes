@@ -455,3 +455,121 @@ class EbayClient:
             offset=0,
             limit=max_items,
         )
+
+    def get_item_status(self, item_id: str) -> dict:
+        """
+        Recupere le statut d'une annonce via l'API getItem.
+
+        Args:
+            item_id: ID eBay (format v1|123456789|0 ou juste 123456789)
+
+        Returns:
+            Dict avec:
+                - status: 'SOLD', 'ENDED', 'ACTIVE', 'NOT_FOUND', 'ERROR'
+                - sold_quantity: nombre d'items vendus
+                - item_end_date: date de fin (si terminee)
+                - title: titre de l'annonce
+                - price: prix
+                - error: message d'erreur (si ERROR)
+        """
+        # Normaliser l'item_id au format v1|xxx|0
+        if not item_id.startswith("v1|"):
+            item_id = f"v1|{item_id}|0"
+
+        url = f"{self.config.api_base_url}/buy/browse/v1/item/{item_id}"
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url, headers=self._get_headers())
+                self._track_api_call(1)
+
+                if response.status_code == 401:
+                    self._refresh_token()
+                    response = client.get(url, headers=self._get_headers())
+                    self._track_api_call(1)
+
+                if response.status_code == 404:
+                    return {"status": "NOT_FOUND", "sold_quantity": 0}
+
+                if response.status_code != 200:
+                    return {"status": "ERROR", "error": f"HTTP {response.status_code}"}
+
+                data = response.json()
+
+                # Extraire les infos de disponibilite
+                availabilities = data.get("estimatedAvailabilities", [])
+                availability_status = "UNKNOWN"
+                sold_quantity = 0
+
+                if availabilities:
+                    avail = availabilities[0]
+                    availability_status = avail.get("estimatedAvailabilityStatus", "UNKNOWN")
+                    sold_quantity = avail.get("estimatedSoldQuantity", 0)
+
+                # Determiner le statut final
+                item_end_date = data.get("itemEndDate")
+                price_data = data.get("price", {})
+
+                if availability_status == "OUT_OF_STOCK" and sold_quantity > 0:
+                    status = "SOLD"
+                elif item_end_date:
+                    # Annonce terminee mais pas vendue
+                    status = "ENDED"
+                else:
+                    status = "ACTIVE"
+
+                return {
+                    "status": status,
+                    "sold_quantity": sold_quantity,
+                    "item_end_date": item_end_date,
+                    "title": data.get("title"),
+                    "price": float(price_data.get("value", 0)) if price_data else None,
+                    "currency": price_data.get("currency", "EUR") if price_data else None,
+                }
+
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    def get_rate_limits(self) -> Optional[dict]:
+        """
+        Recupere les limites de taux depuis l'API eBay Analytics.
+
+        Returns:
+            Dict avec count, limit, remaining, reset (ISO 8601) ou None si erreur
+        """
+        url = "https://api.ebay.com/developer/analytics/v1_beta/rate_limit/"
+        params = {
+            "api_name": "browse",
+            "api_context": "buy"
+        }
+
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url, headers=self._get_headers(), params=params)
+
+                if response.status_code == 401:
+                    self._refresh_token()
+                    response = client.get(url, headers=self._get_headers(), params=params)
+
+                if response.status_code != 200:
+                    return None
+
+                data = response.json()
+
+                # Parser la reponse pour trouver les infos de browse API
+                for rate_limit in data.get("rateLimits", []):
+                    if rate_limit.get("apiName", "").lower() == "browse":
+                        for resource in rate_limit.get("resources", []):
+                            rates = resource.get("rates", [])
+                            if rates:
+                                rate = rates[0]
+                                return {
+                                    "count": rate.get("count", 0),
+                                    "limit": rate.get("limit", 5000),
+                                    "remaining": rate.get("remaining", 5000),
+                                    "reset": rate.get("reset"),  # ISO 8601
+                                    "time_window": rate.get("timeWindow"),
+                                }
+                return None
+        except Exception:
+            return None
