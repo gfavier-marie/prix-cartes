@@ -84,6 +84,24 @@ class EbayQueryBuilder:
 
         return query
 
+    # Caracteres speciaux a supprimer des noms de cartes
+    SPECIAL_CHARS = [
+        'δ',  # Delta species
+        '☆',  # Gold star
+        '★',  # Star
+        '♀',  # Female
+        '♂',  # Male
+        '◇',  # Prism star
+        '●',  # Bullet
+        '♦',  # Diamond
+        '♣',  # Club
+        '♠',  # Spade
+        '♥',  # Heart
+        '©',  # Copyright
+        '®',  # Registered
+        '™',  # Trademark
+    ]
+
     def _clean_name(self, name: str) -> str:
         """Nettoie le nom de la carte."""
         # Retirer les guillemets doubles (problematiques pour eBay)
@@ -91,6 +109,12 @@ class EbayQueryBuilder:
         # Garder les apostrophes (ex: "Double Suppression d'Énergie")
         # Remplacer les tirets par des espaces
         name = name.replace("-", " ")
+        # Supprimer les caracteres speciaux (δ, ☆, etc.)
+        for char in self.SPECIAL_CHARS:
+            name = name.replace(char, '')
+        # Nettoyer les espaces multiples
+        while '  ' in name:
+            name = name.replace('  ', ' ')
         return name.strip()
 
     def _truncate_query(self, query: str) -> str:

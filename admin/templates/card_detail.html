@@ -76,6 +76,14 @@
                 </select>
                 <span style="font-size: 11px; color: var(--text-muted);">Actuel: {{ card.card_number_format.value if card.card_number_format else 'LOCAL_TOTAL' }}</span>
             </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="card_number_padded">Padding zéros</label>
+                <div style="display: flex; align-items: center; gap: 8px; height: 38px;">
+                    <input type="checkbox" id="card_number_padded" name="card_number_padded" {% if card.card_number_padded %}checked{% endif %} style="width: 18px; height: 18px;">
+                    <span style="font-size: 13px;">1/92 → 001/092</span>
+                </div>
+                <span style="font-size: 11px; color: var(--text-muted);">Complète avec des zéros (XXX/XXX)</span>
+            </div>
         </div>
         <div style="margin-top: 16px; display: flex; gap: 12px;">
             <button type="submit" class="btn btn-success" id="save-info-btn">Sauvegarder</button>
@@ -101,6 +109,7 @@ document.getElementById('card-info-form').addEventListener('submit', async funct
                 set_name_override: document.getElementById('set_name_override').value.trim() || null,
                 card_count_official_override: document.getElementById('card_count_official_override').value.trim() || null,
                 card_number_format: document.getElementById('card_number_format').value || null,
+                card_number_padded: document.getElementById('card_number_padded').checked,
             })
         });
         const data = await response.json();
@@ -126,6 +135,7 @@ function resetOverrides() {
         document.getElementById('set_name_override').value = '';
         document.getElementById('card_count_official_override').value = '';
         document.getElementById('card_number_format').value = '';
+        document.getElementById('card_number_padded').checked = false;
         document.getElementById('card-info-form').dispatchEvent(new Event('submit'));
     }
 }

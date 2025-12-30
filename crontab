@@ -1,0 +1,2 @@
+# Verifie toutes les minutes si c'est l'heure du batch (batch_hour + batch_minute)
+* * * * * cd /app && /usr/local/bin/python scripts/run_scheduled_batch.py >> /var/log/batch.log 2>&1

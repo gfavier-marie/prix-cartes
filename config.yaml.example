@@ -1,0 +1,48 @@
+# Configuration prix-cartes - TEMPLATE
+# Copier ce fichier vers config.yaml et remplir les valeurs
+#
+# IMPORTANT: Les credentials sensibles doivent etre definis via variables d'environnement:
+#   - EBAY_CLIENT_ID
+#   - EBAY_CLIENT_SECRET
+#   - FLASK_SECRET_KEY
+
+admin:
+  host: 127.0.0.1
+  port: 5000
+
+database:
+  db_path: data/pricing.db
+
+ebay:
+  # NE PAS METTRE LES CREDENTIALS ICI - utiliser les variables d'environnement
+  # client_id: <EBAY_CLIENT_ID>
+  # client_secret: <EBAY_CLIENT_SECRET>
+  marketplace_id: EBAY_FR
+  sample_limit: 200
+
+guardrails:
+  dispersion_bad: 4.0
+  mismatch_lower: 0.4
+  mismatch_upper: 2.5
+
+pricing:
+  coef_bon: 0.6
+  coef_correct: 0.3
+  coef_neuf: 1.0
+  fees_rate: 0.11
+  fixed_costs_eur: 0.5
+  margin_target: 0.27
+  max_buy_price: 10000.0
+  min_buy_price: 0.5
+  min_card_value_eur: 3.0
+  risk_base: 0.02
+  rounding_step: 0.1
+
+tcgdex:
+  excluded_series:
+    - tcgp
+    - mc
+    - tk
+    - misc
+  excluded_sets: []
+  language: fr

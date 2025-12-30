@@ -132,8 +132,8 @@ class EbayWorker:
                 card_number_for_filter = None
                 card_number_full_for_filter = None
             else:
-                card_number_for_filter = card.local_id
-                card_number_full_for_filter = card.card_number_full
+                card_number_for_filter = card.effective_local_id
+                card_number_full_for_filter = card.effective_card_number_full
 
             # Pour tous les variants SAUF REVERSE: recherche sans filtre reverse pour capturer les deux
             # Pour REVERSE: filtrer uniquement les reverse

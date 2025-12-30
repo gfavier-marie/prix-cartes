@@ -9,7 +9,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 import csv
 import io
 
-from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage, SoldListing, Set, CardNumberFormat
+from src.models import Card, BuyPrice, MarketSnapshot, BatchRun, BuyPriceStatus, AnchorSource, BatchMode, ApiUsage, SoldListing, Set, CardNumberFormat, Settings
 from src.database import get_session, init_db
 from src.config import get_config
 from src.batch import BatchRunner
@@ -71,9 +71,9 @@ def get_sets_grouped_by_series():
 def create_app() -> Flask:
     """Cree l'application Flask."""
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    app.secret_key = "prix-cartes-admin-secret"
 
     config = get_config()
+    app.secret_key = config.flask_secret_key
 
     @app.route("/")
     def index():
@@ -759,6 +759,15 @@ def create_app() -> Flask:
             else:
                 card.card_number_format = None
 
+            # card_number_padded: convertir en booleen ou None
+            card_number_padded = data.get("card_number_padded")
+            if card_number_padded is True or card_number_padded == "true":
+                card.card_number_padded = True
+            elif card_number_padded is False or card_number_padded == "false" or card_number_padded == "":
+                card.card_number_padded = None
+            else:
+                card.card_number_padded = None
+
             card.updated_at = datetime.utcnow()
 
             # Regenerer la requete eBay avec les nouvelles valeurs
@@ -778,6 +787,7 @@ def create_app() -> Flask:
                     "set_name_override": card.set_name_override,
                     "card_count_official_override": card.card_count_official_override,
                     "card_number_format": card.card_number_format.value if card.card_number_format else None,
+                    "card_number_padded": card.card_number_padded,
                     "effective_name": card.effective_name,
                     "effective_local_id": card.effective_local_id,
                     "effective_set_name": card.effective_set_name,
@@ -1322,6 +1332,16 @@ def create_app() -> Flask:
                                 except KeyError:
                                     results["errors"].append(f"Ligne {row_num}: card_number_format invalide: {format_str}")
 
+                            # Gestion de card_number_padded (padding avec zeros)
+                            if 'card_number_padded' in row:
+                                padded_str = row['card_number_padded'].strip().lower()
+                                if padded_str in ('true', '1', 'oui', 'yes'):
+                                    card.card_number_padded = True
+                                    updated_fields.append('card_number_padded')
+                                elif padded_str in ('false', '0', 'non', 'no', ''):
+                                    card.card_number_padded = None
+                                    updated_fields.append('card_number_padded')
+
                             if updated_fields:
                                 # Regenerer la requete eBay seulement si pas d'override
                                 if 'ebay_query' not in updated_fields:
@@ -1726,6 +1746,74 @@ def create_app() -> Flask:
         return jsonify(results)
 
     # ===================
+    # SETTINGS
+    # ===================
+
+    @app.route("/settings")
+    def settings_page():
+        """Page de configuration des parametres."""
+        with get_session() as session:
+            # Recuperer tous les settings
+            settings = Settings.get_all(session)
+
+            # Usage API du jour
+            api_usage = get_ebay_usage_summary(session)
+
+            return render_template("settings.html",
+                settings=settings,
+                api_usage=api_usage,
+            )
+
+    @app.route("/settings", methods=["POST"])
+    def settings_save():
+        """Sauvegarder les parametres."""
+        with get_session() as session:
+            # batch_enabled
+            batch_enabled = request.form.get("batch_enabled", "false")
+            Settings.set_value(session, "batch_enabled", batch_enabled)
+
+            # batch_hour
+            batch_hour = request.form.get("batch_hour", "3")
+            try:
+                batch_hour_int = int(batch_hour)
+                if batch_hour_int < 0 or batch_hour_int > 23:
+                    batch_hour = "3"
+                else:
+                    batch_hour = str(batch_hour_int)
+            except ValueError:
+                batch_hour = "3"
+            Settings.set_value(session, "batch_hour", batch_hour)
+
+            # batch_minute
+            batch_minute = request.form.get("batch_minute", "0")
+            try:
+                batch_minute_int = int(batch_minute)
+                if batch_minute_int < 0 or batch_minute_int > 59:
+                    batch_minute = "0"
+                else:
+                    batch_minute = str(batch_minute_int)
+            except ValueError:
+                batch_minute = "0"
+            Settings.set_value(session, "batch_minute", batch_minute)
+
+            # daily_api_limit
+            daily_api_limit = request.form.get("daily_api_limit", "5000")
+            try:
+                daily_limit_int = int(daily_api_limit)
+                if daily_limit_int < 0:
+                    daily_api_limit = "5000"
+                else:
+                    daily_api_limit = str(daily_limit_int)
+            except ValueError:
+                daily_api_limit = "5000"
+            Settings.set_value(session, "daily_api_limit", daily_api_limit)
+
+            session.commit()
+
+        flash("Parametres sauvegardes avec succes", "success")
+        return redirect(url_for("settings_page"))
+
+    # ===================
     # VENTES DETECTEES
     # ===================
 
@@ -1819,6 +1907,10 @@ def create_app() -> Flask:
             )
 
     return app
+
+
+# Instance globale pour gunicorn
+app = create_app()
 
 
 def run_admin():

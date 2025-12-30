@@ -6,6 +6,7 @@ Tous les parametres des specs sont definis ici.
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+import os
 import yaml
 
 
@@ -131,9 +132,18 @@ class AppConfig:
     admin_host: str = "127.0.0.1"
     admin_port: int = 5000
 
+    # Secret Flask (charge depuis env var FLASK_SECRET_KEY)
+    flask_secret_key: str = "dev-secret-key-change-in-production"
+
     @classmethod
     def load(cls, config_path: Optional[Path] = None) -> "AppConfig":
-        """Charge la config depuis un fichier YAML."""
+        """Charge la config depuis un fichier YAML + variables d'environnement.
+
+        Les variables d'environnement ont priorite sur le fichier YAML pour les secrets:
+        - EBAY_CLIENT_ID
+        - EBAY_CLIENT_SECRET
+        - FLASK_SECRET_KEY
+        """
         config = cls()
 
         if config_path is None:
@@ -180,6 +190,16 @@ class AppConfig:
                     config.admin_host = data["admin"]["host"]
                 if "port" in data["admin"]:
                     config.admin_port = data["admin"]["port"]
+
+        # Override secrets depuis variables d'environnement (prioritaire)
+        if os.environ.get("EBAY_CLIENT_ID"):
+            config.ebay.client_id = os.environ["EBAY_CLIENT_ID"]
+        if os.environ.get("EBAY_CLIENT_SECRET"):
+            config.ebay.client_secret = os.environ["EBAY_CLIENT_SECRET"]
+        if os.environ.get("FLASK_SECRET_KEY"):
+            config.flask_secret_key = os.environ["FLASK_SECRET_KEY"]
+        else:
+            config.flask_secret_key = "dev-secret-key-change-in-production"
 
         return config
 

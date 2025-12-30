@@ -123,6 +123,7 @@ class Card(Base):
     card_number_full_override = Column(String(20), nullable=True)  # ex: "H01/H32"
     card_count_official_override = Column(String(20), nullable=True)  # ex: "H32" pour les holos ecard
     card_number_format = Column(Enum(CardNumberFormat), nullable=True)  # Format pour eBay query
+    card_number_padded = Column(Boolean, nullable=True)  # Si True, padding avec zeros: 1/92 -> 001/092
 
     # Prix Cardmarket (via TCGdex)
     cm_trend = Column(Float, nullable=True)
@@ -190,12 +191,37 @@ class Card(Base):
         """Retourne le numero complet construit avec card_count_official_override si defini, sinon TCGdex."""
         # Si card_count_official_override est defini, construire local_id/count
         if self.card_count_official_override:
-            return f"{self.effective_local_id}/{self.card_count_official_override}"
+            local_id = self.effective_local_id
+            total = self.card_count_official_override
+            # Appliquer le padding si demande (toujours 3 chiffres)
+            if self.card_number_padded:
+                local_id = self._pad_number(local_id, '000')
+                total = self._pad_number(total, '000')
+            return f"{local_id}/{total}"
         # Sinon utiliser card_number_full_override si defini
         if self.card_number_full_override:
             return self.card_number_full_override
-        # Sinon valeur TCGdex
+        # Sinon valeur TCGdex (avec padding si demande)
+        if self.card_number_full and self.card_number_padded:
+            parts = self.card_number_full.split("/")
+            if len(parts) == 2:
+                local_id, total = parts[0], parts[1]
+                # Toujours 3 chiffres si padding active: 2/90 -> 002/090
+                return f"{self._pad_number(local_id, '000')}/{self._pad_number(total, '000')}"
         return self.card_number_full
+
+    def _pad_number(self, value: str, reference: str) -> str:
+        """Ajoute des zeros devant un nombre pour atteindre la longueur de reference.
+
+        Ex: _pad_number("1", "92") -> "01"
+            _pad_number("5", "102") -> "005"
+            _pad_number("H01", "H32") -> "H01" (garde tel quel si non numerique)
+        """
+        # Extraire la partie numerique
+        if value.isdigit() and reference.isdigit():
+            target_len = len(reference)
+            return value.zfill(target_len)
+        return value
 
     @property
     def has_overrides(self) -> bool:
@@ -462,3 +488,62 @@ class SoldListing(Base):
 
     def __repr__(self) -> str:
         return f"<SoldListing {self.item_id}: {self.effective_price}€>"
+
+
+class Settings(Base):
+    """Parametres applicatifs modifiables via l'interface admin."""
+
+    __tablename__ = "settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(String(500), nullable=False)
+    description = Column(String(500), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Cles predefinies et valeurs par defaut
+    DEFAULTS = {
+        "batch_enabled": ("true", "Activer le batch automatique quotidien"),
+        "batch_hour": ("3", "Heure d'execution du batch (0-23)"),
+        "daily_api_limit": ("5000", "Limite quotidienne d'appels API eBay"),
+    }
+
+    @classmethod
+    def get_value(cls, session, key: str, default: str = None) -> str:
+        """Recupere une valeur de setting."""
+        setting = session.query(cls).filter_by(key=key).first()
+        if setting:
+            return setting.value
+        # Retourner la valeur par defaut si elle existe
+        if key in cls.DEFAULTS:
+            return cls.DEFAULTS[key][0]
+        return default
+
+    @classmethod
+    def set_value(cls, session, key: str, value: str) -> None:
+        """Definit une valeur de setting."""
+        setting = session.query(cls).filter_by(key=key).first()
+        if setting:
+            setting.value = value
+        else:
+            description = cls.DEFAULTS.get(key, (None, None))[1]
+            setting = cls(key=key, value=value, description=description)
+            session.add(setting)
+        session.commit()
+
+    @classmethod
+    def get_all(cls, session) -> dict:
+        """Recupere tous les settings avec valeurs par defaut."""
+        result = {}
+        # D'abord les valeurs par defaut
+        for key, (default_value, description) in cls.DEFAULTS.items():
+            result[key] = {"value": default_value, "description": description}
+        # Puis les valeurs en base (ecrasent les defauts)
+        for setting in session.query(cls).all():
+            result[setting.key] = {
+                "value": setting.value,
+                "description": setting.description or cls.DEFAULTS.get(setting.key, (None, ""))[1]
+            }
+        return result
+
+    def __repr__(self) -> str:
+        return f"<Settings {self.key}={self.value}>"

@@ -13,7 +13,7 @@ from rich.progress import Progress, TaskID, SpinnerColumn, TextColumn, BarColumn
 
 from sqlalchemy.orm import Session
 
-from ..models import Card, MarketSnapshot, BatchRun, BatchMode, AnchorSource, ApiUsage, Variant
+from ..models import Card, MarketSnapshot, BatchRun, BatchMode, AnchorSource, ApiUsage, Variant, Settings
 from ..database import get_session, get_db_session
 from ..config import get_config
 from ..ebay import EbayQueryBuilder, EbayWorker
@@ -49,11 +49,12 @@ class BatchStats:
     processed: int = 0
     succeeded: int = 0
     failed: int = 0
-    skipped: int = 0  # Cartes exclues (valeur trop faible)
+    skipped: int = 0  # Cartes exclues (valeur trop faible ou set ignore)
     mismatch_count: int = 0
     low_confidence_count: int = 0
     errors: list[tuple[int, str]] = field(default_factory=list)  # (card_id, error)
-    stopped_consecutive_failures: bool = False  # Arrete pour echecs consecutifs
+    skipped_sets: list[str] = field(default_factory=list)  # Sets ignores apres trop d'echecs
+    stopped_api_limit: bool = False  # Arrete pour limite API quotidienne atteinte
 
 
 @dataclass
@@ -105,6 +106,25 @@ class BatchRunner:
             return get_ebay_usage_summary(self._usage_session)
         return {}
 
+    def _check_api_limit(self, session: Session) -> bool:
+        """Verifie si la limite API quotidienne est atteinte.
+
+        Returns:
+            True si la limite est atteinte, False sinon.
+        """
+        # Recuperer la limite depuis les Settings
+        daily_limit_str = Settings.get_value(session, "daily_api_limit", "5000")
+        try:
+            daily_limit = int(daily_limit_str)
+        except ValueError:
+            daily_limit = 5000
+
+        # Recuperer l'usage actuel
+        usage = self.get_api_usage_today()
+        today_count = usage.get("today_count", 0)
+
+        return today_count >= daily_limit
+
     def close(self) -> None:
         """Ferme la session de tracking."""
         if self._usage_session:
@@ -118,6 +138,7 @@ class BatchRunner:
         set_id: Optional[str] = None,
         limit: Optional[int] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        prioritize_oldest: bool = False,
     ) -> tuple[BatchStats, AnomalyReport]:
         """
         Execute le batch de pricing.
@@ -128,6 +149,7 @@ class BatchRunner:
             set_id: Optionnel - filtre par set_id (ex: "base1", "sv03.5")
             limit: Limite du nombre de cartes a traiter
             progress_callback: Callback (processed, total) pour la progression
+            prioritize_oldest: Si True, traite d'abord les cartes jamais traitees ou les plus anciennes
 
         Returns:
             (BatchStats, AnomalyReport)
@@ -137,6 +159,12 @@ class BatchRunner:
         batch_run: Optional[BatchRun] = None
 
         with get_session() as session:
+            # Verifier la limite API AVANT de commencer
+            if self._check_api_limit(session):
+                console.print("[yellow]Limite API quotidienne deja atteinte, batch non demarre[/yellow]")
+                stats.stopped_api_limit = True
+                return stats, anomalies
+
             # Recuperer le nom du set si set_id specifie
             set_name = None
             if set_id:
@@ -156,20 +184,24 @@ class BatchRunner:
             session.add(batch_run)
             session.flush()
 
-            # Recuperer les cartes a traiter
-            cards = self._get_cards_to_process(session, card_ids, set_id, limit)
+            # Recuperer les cartes a traiter (avec priorisation si demandee)
+            cards = self._get_cards_to_process(session, card_ids, set_id, limit, prioritize_oldest)
             stats.total_cards = len(cards)
             batch_run.cards_targeted = stats.total_cards
             session.commit()  # Commit initial pour que le batch soit visible
 
-            console.print(f"[cyan]Starting batch with {stats.total_cards} cards (mode: {mode.value})[/cyan]")
+            if prioritize_oldest:
+                console.print(f"[cyan]Starting batch with {stats.total_cards} cards (mode: {mode.value}, priorite: anciennes d'abord)[/cyan]")
+            else:
+                console.print(f"[cyan]Starting batch with {stats.total_cards} cards (mode: {mode.value})[/cyan]")
 
             # Reinitialiser le flag d'arret au demarrage
             clear_stop()
 
-            # Compteur d'echecs consecutifs
-            consecutive_failures = 0
-            MAX_CONSECUTIVE_FAILURES = 10
+            # Compteur d'echecs par set (pour skip les sets problematiques)
+            set_failures: dict[str, int] = {}  # set_id -> nombre d'echecs
+            skipped_sets: set[str] = set()  # sets a ignorer
+            MAX_SET_FAILURES = 10
 
             # Traiter chaque carte
             for i, card in enumerate(cards):
@@ -178,30 +210,47 @@ class BatchRunner:
                     console.print("[yellow]Batch interrompu par l'utilisateur[/yellow]")
                     break
 
-                # Verifier les echecs consecutifs (arrete juste cette serie, pas toute la queue)
-                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                    console.print(f"[red]Serie arretee: {MAX_CONSECUTIVE_FAILURES} echecs consecutifs[/red]")
-                    stats.stopped_consecutive_failures = True
+                # Verifier la limite API quotidienne AVANT de traiter la carte
+                if self._check_api_limit(session):
+                    console.print("[yellow]Limite API quotidienne atteinte, arret du batch[/yellow]")
+                    stats.stopped_api_limit = True
                     break
+
+                # Verifier si le set de cette carte est a ignorer
+                if card.set_id in skipped_sets:
+                    stats.skipped += 1
+                    stats.processed += 1
+                    continue
 
                 try:
                     result = self._process_card(session, card, mode, anomalies)
 
                     if result == "success":
                         stats.succeeded += 1
-                        consecutive_failures = 0  # Reset on success
+                        # Reset compteur du set en cas de succes
+                        if card.set_id in set_failures:
+                            set_failures[card.set_id] = 0
                     elif result == "skipped":
                         stats.skipped += 1
-                        consecutive_failures = 0  # Reset on skip (not a failure)
                     elif result == "failed":
                         stats.failed += 1
-                        consecutive_failures += 1
+                        # Incrementer compteur d'echecs pour ce set
+                        set_failures[card.set_id] = set_failures.get(card.set_id, 0) + 1
+                        if set_failures[card.set_id] >= MAX_SET_FAILURES:
+                            console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
+                            skipped_sets.add(card.set_id)
+                            stats.skipped_sets.append(card.set_id)
 
                 except Exception as e:
                     stats.failed += 1
-                    consecutive_failures += 1
                     stats.errors.append((card.id, str(e)))
                     console.print(f"[red]Error processing card {card.id}: {e}[/red]")
+                    # Incrementer compteur d'echecs pour ce set
+                    set_failures[card.set_id] = set_failures.get(card.set_id, 0) + 1
+                    if set_failures[card.set_id] >= MAX_SET_FAILURES:
+                        console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
+                        skipped_sets.add(card.set_id)
+                        stats.skipped_sets.append(card.set_id)
 
                 stats.processed += 1
 
@@ -232,10 +281,50 @@ class BatchRunner:
         session: Session,
         card_ids: Optional[list[int]],
         set_id: Optional[str],
-        limit: Optional[int]
+        limit: Optional[int],
+        prioritize_oldest: bool = False
     ) -> list[Card]:
-        """Recupere les cartes a traiter."""
-        query = session.query(Card).filter(Card.is_active == True)
+        """
+        Recupere les cartes a traiter.
+
+        Args:
+            prioritize_oldest: Si True, trie par date du dernier snapshot (les plus anciennes d'abord,
+                              puis celles sans snapshot)
+        """
+        from sqlalchemy import func, case
+        from sqlalchemy.orm import aliased
+
+        if prioritize_oldest:
+            # Subquery pour trouver la date du dernier snapshot de chaque carte
+            latest_snapshot = session.query(
+                MarketSnapshot.card_id,
+                func.max(MarketSnapshot.as_of_date).label('last_snapshot_date')
+            ).group_by(MarketSnapshot.card_id).subquery()
+
+            # Jointure avec tri intelligent:
+            # 1. Exclure les cartes en erreur récente (< 24h) pour éviter de bloquer sur un set problématique
+            # 2. NULL (jamais traité) en premier
+            # 3. Puis les plus anciens
+            from datetime import timedelta
+            error_cooldown = datetime.utcnow() - timedelta(hours=24)
+
+            query = session.query(Card).outerjoin(
+                latest_snapshot,
+                Card.id == latest_snapshot.c.card_id
+            ).filter(
+                Card.is_active == True,
+                # Exclure cartes en erreur depuis moins de 24h
+                (Card.last_error_at.is_(None)) | (Card.last_error_at < error_cooldown)
+            ).order_by(
+                # NULL en premier (jamais traité), puis par date croissante (plus ancien d'abord)
+                case(
+                    (latest_snapshot.c.last_snapshot_date.is_(None), 0),
+                    else_=1
+                ),
+                latest_snapshot.c.last_snapshot_date.asc()
+            )
+        else:
+            query = session.query(Card).filter(Card.is_active == True)
 
         if card_ids:
             query = query.filter(Card.id.in_(card_ids))
@@ -376,11 +465,14 @@ class BatchRunner:
             f"Processed: {stats.processed}",
             f"Succeeded: {stats.succeeded}",
             f"Failed: {stats.failed}",
-            f"Skipped (low value): {stats.skipped}",
+            f"Skipped: {stats.skipped}",
         ]
 
-        if stats.stopped_consecutive_failures:
-            lines.append("*** ARRETE: 10 echecs consecutifs ***")
+        if stats.skipped_sets:
+            lines.append(f"*** Sets ignores ({len(stats.skipped_sets)}): {', '.join(stats.skipped_sets)} ***")
+
+        if stats.stopped_api_limit:
+            lines.append("*** ARRETE: Limite API quotidienne atteinte ***")
 
         lines.extend([
             "",
