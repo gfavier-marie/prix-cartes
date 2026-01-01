@@ -88,7 +88,9 @@ class BatchRunner:
 
         if track_api_usage:
             self._usage_session = get_db_session()
-            self._usage_tracker = EbayUsageTracker(self._usage_session)
+            # Lire la limite depuis Settings (source unique de verite)
+            daily_limit = int(Settings.get_value(self._usage_session, "daily_api_limit", "5000"))
+            self._usage_tracker = EbayUsageTracker(self._usage_session, daily_limit=daily_limit)
             self.worker = EbayWorker(on_api_call=self._on_api_call)
         else:
             self.worker = EbayWorker()
