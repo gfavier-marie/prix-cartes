@@ -57,6 +57,35 @@
                 <small class="text-muted">Le batch s'arretera automatiquement si cette limite est atteinte</small>
             </div>
 
+            <h3 style="margin-top: 24px; margin-bottom: 16px; color: var(--text-secondary);">Priorisation des cartes</h3>
+
+            <div class="form-group">
+                <label for="low_value_threshold">Seuil basse valeur (euros)</label>
+                <input type="number" id="low_value_threshold" name="low_value_threshold"
+                       value="{{ settings.low_value_threshold.value if settings.low_value_threshold else '10' }}"
+                       min="0" step="0.5"
+                       style="max-width: 120px;">
+                <small class="text-muted">Les cartes sous ce seuil sont rafraichies moins souvent</small>
+            </div>
+
+            <div class="form-group">
+                <label for="low_value_refresh_days">Frequence basse valeur (jours)</label>
+                <input type="number" id="low_value_refresh_days" name="low_value_refresh_days"
+                       value="{{ settings.low_value_refresh_days.value if settings.low_value_refresh_days else '60' }}"
+                       min="1" step="1"
+                       style="max-width: 120px;">
+                <small class="text-muted">Cartes < seuil = rafraichies tous les X jours (ex: 60 = tous les 2 mois)</small>
+            </div>
+
+            <div class="form-group">
+                <label for="max_error_retries">Max erreurs consecutives</label>
+                <input type="number" id="max_error_retries" name="max_error_retries"
+                       value="{{ settings.max_error_retries.value if settings.max_error_retries else '3' }}"
+                       min="1" step="1"
+                       style="max-width: 120px;">
+                <small class="text-muted">Apres X erreurs, la carte passe en basse priorite (meme frequence que basse valeur)</small>
+            </div>
+
             <button type="submit" class="btn btn-primary">Sauvegarder</button>
         </form>
     </div>
@@ -100,6 +129,15 @@
         <li>C'est l'heure et la minute configurees</li>
         <li>La limite quotidienne d'appels API n'est pas atteinte</li>
     </ul>
+
+    <h3 style="margin-top: 20px; color: var(--text-secondary);">Ordre de priorite des cartes</h3>
+    <ol class="text-secondary" style="margin: 12px 0 0 20px; line-height: 1.8;">
+        <li><strong>Cartes jamais explorees</strong> - toujours en premier</li>
+        <li><strong>Cartes en erreur</strong> (< max erreurs) - cooldown 24h</li>
+        <li><strong>Cartes basse valeur</strong> (< seuil) ou <strong>trop d'erreurs</strong> - rafraichies tous les X jours</li>
+        <li><strong>Autres cartes</strong> - par anciennete (plus anciennes d'abord)</li>
+    </ol>
+
     <p class="text-secondary" style="margin-top: 12px;">
         Les logs du batch sont disponibles dans <code class="mono">/var/log/batch.log</code> (en production Docker).
     </p>

@@ -55,6 +55,7 @@ class BatchStats:
     errors: list[tuple[int, str]] = field(default_factory=list)  # (card_id, error)
     skipped_sets: list[str] = field(default_factory=list)  # Sets ignores apres trop d'echecs
     stopped_api_limit: bool = False  # Arrete pour limite API quotidienne atteinte
+    stopped_consecutive_failures: bool = False  # Arrete pour echecs consecutifs sur un set
 
 
 @dataclass
@@ -287,14 +288,20 @@ class BatchRunner:
         prioritize_oldest: bool = False
     ) -> list[Card]:
         """
-        Recupere les cartes a traiter.
+        Recupere les cartes a traiter avec regles de priorisation.
+
+        Ordre de priorite (si prioritize_oldest=True):
+        1. Cartes jamais explorees (pas de snapshot)
+        2. Cartes en erreur < max_error_retries (cooldown 24h)
+        3. Cartes en erreur >= max_error_retries OU valeur < seuil (1x par low_value_refresh_days)
+        4. Autres cartes (plus ancien d'abord)
 
         Args:
-            prioritize_oldest: Si True, trie par date du dernier snapshot (les plus anciennes d'abord,
-                              puis celles sans snapshot)
+            prioritize_oldest: Si True, applique les regles de priorisation
         """
-        from sqlalchemy import func, case
+        from sqlalchemy import func, case, and_, or_
         from sqlalchemy.orm import aliased
+        from datetime import timedelta
 
         # Recuperer les series/sets exclus depuis la config
         config = get_config()
@@ -302,35 +309,86 @@ class BatchRunner:
         excluded_sets = config.tcgdex.excluded_sets or []
 
         if prioritize_oldest:
-            # Subquery pour trouver la date du dernier snapshot de chaque carte
+            # Recuperer les parametres de priorisation depuis Settings
+            low_value_threshold = float(Settings.get_value(session, "low_value_threshold", "10"))
+            low_value_refresh_days = int(Settings.get_value(session, "low_value_refresh_days", "60"))
+            max_error_retries = int(Settings.get_value(session, "max_error_retries", "3"))
+
+            # Subquery pour trouver le dernier snapshot de chaque carte avec anchor_price
             latest_snapshot = session.query(
                 MarketSnapshot.card_id,
                 func.max(MarketSnapshot.as_of_date).label('last_snapshot_date')
             ).group_by(MarketSnapshot.card_id).subquery()
 
-            # Jointure avec tri intelligent:
-            # 1. Exclure les cartes en erreur récente (< 24h) pour éviter de bloquer sur un set problématique
-            # 2. NULL (jamais traité) en premier
-            # 3. Puis les plus anciens
-            from datetime import timedelta
+            # Subquery pour recuperer l'anchor_price du dernier snapshot
+            snapshot_with_price = session.query(
+                MarketSnapshot.card_id,
+                MarketSnapshot.anchor_price,
+                MarketSnapshot.as_of_date
+            ).join(
+                latest_snapshot,
+                and_(
+                    MarketSnapshot.card_id == latest_snapshot.c.card_id,
+                    MarketSnapshot.as_of_date == latest_snapshot.c.last_snapshot_date
+                )
+            ).subquery()
+
+            # Cooldowns
             error_cooldown = datetime.utcnow() - timedelta(hours=24)
+            low_value_cooldown = date.today() - timedelta(days=low_value_refresh_days)
+
+            # Construire la query avec priorites
+            # Priority 0: jamais explore (NULL snapshot)
+            # Priority 1: erreur < max_retries et cooldown 24h OK
+            # Priority 2: (erreur >= max_retries OU valeur < seuil) et cooldown X jours OK
+            # Priority 3: valeur >= seuil, plus ancien d'abord
 
             query = session.query(Card).join(
                 Set, Card.set_id == Set.id
             ).outerjoin(
-                latest_snapshot,
-                Card.id == latest_snapshot.c.card_id
+                snapshot_with_price,
+                Card.id == snapshot_with_price.c.card_id
             ).filter(
                 Card.is_active == True,
-                # Exclure cartes en erreur depuis moins de 24h
-                (Card.last_error_at.is_(None)) | (Card.last_error_at < error_cooldown)
+            ).filter(
+                or_(
+                    # Jamais explore -> toujours inclus
+                    snapshot_with_price.c.card_id.is_(None),
+                    # Erreur recente < max_retries -> cooldown 24h
+                    and_(
+                        Card.error_count < max_error_retries,
+                        or_(Card.last_error_at.is_(None), Card.last_error_at < error_cooldown)
+                    ),
+                    # Erreur >= max_retries -> cooldown X jours
+                    and_(
+                        Card.error_count >= max_error_retries,
+                        snapshot_with_price.c.as_of_date < low_value_cooldown
+                    ),
+                    # Basse valeur -> cooldown X jours
+                    and_(
+                        Card.error_count < max_error_retries,
+                        snapshot_with_price.c.anchor_price < low_value_threshold,
+                        snapshot_with_price.c.as_of_date < low_value_cooldown
+                    ),
+                    # Haute valeur -> toujours inclus (sera trie par anciennete)
+                    and_(
+                        Card.error_count < max_error_retries,
+                        or_(
+                            snapshot_with_price.c.anchor_price >= low_value_threshold,
+                            snapshot_with_price.c.anchor_price.is_(None)
+                        )
+                    ),
+                )
             ).order_by(
-                # NULL en premier (jamais traité), puis par date croissante (plus ancien d'abord)
+                # Priorite: 0=jamais explore, 1=erreur normale, 2=basse valeur/erreur max, 3=haute valeur
                 case(
-                    (latest_snapshot.c.last_snapshot_date.is_(None), 0),
-                    else_=1
+                    (snapshot_with_price.c.card_id.is_(None), 0),  # Jamais explore
+                    (and_(Card.error_count < max_error_retries, Card.last_error_at.isnot(None)), 1),  # Erreur recente
+                    (Card.error_count >= max_error_retries, 2),  # Trop d'erreurs
+                    (snapshot_with_price.c.anchor_price < low_value_threshold, 2),  # Basse valeur
+                    else_=3  # Haute valeur normale
                 ),
-                latest_snapshot.c.last_snapshot_date.asc()
+                snapshot_with_price.c.as_of_date.asc().nullsfirst()  # Plus ancien d'abord
             )
         else:
             query = session.query(Card).join(Set, Card.set_id == Set.id).filter(Card.is_active == True)
@@ -388,6 +446,7 @@ class BatchRunner:
                     error_msg = f"{result.error} ({result.active_count} résultats eBay)"
                 card.last_error = error_msg
                 card.last_error_at = datetime.utcnow()
+                card.error_count = (card.error_count or 0) + 1  # Incrementer le compteur d'erreurs
 
                 # Pas de fallback - echec direct si pas de resultat eBay
                 anomalies.query_issues.append({
@@ -398,9 +457,10 @@ class BatchRunner:
                 })
                 return "failed"
             else:
-                # Succes: effacer l'erreur precedente
+                # Succes: effacer l'erreur precedente et reinitialiser le compteur
                 card.last_error = None
                 card.last_error_at = None
+                card.error_count = 0
                 # Creer le snapshot depuis les donnees eBay
                 snapshot = self.worker.create_snapshot(card, result, as_of, items=result.items)
 
@@ -427,7 +487,10 @@ class BatchRunner:
             # Utiliser Cardmarket directement
             cm_value = card.cm_max
             if cm_value is None or cm_value <= 0:
+                card.error_count = (card.error_count or 0) + 1
                 return "failed"
+            # Succes en mode HYBRID
+            card.error_count = 0
 
             snapshot = MarketSnapshot(
                 card_id=card.id,

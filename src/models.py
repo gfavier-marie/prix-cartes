@@ -139,6 +139,7 @@ class Card(Base):
     # Derniere erreur de collecte
     last_error = Column(Text, nullable=True)
     last_error_at = Column(DateTime, nullable=True)
+    error_count = Column(Integer, default=0, nullable=False)  # Compteur d'erreurs consecutives
 
     # Relations
     set_info = relationship("Set", back_populates="cards", foreign_keys=[set_id])
@@ -518,6 +519,9 @@ class Settings(Base):
         "batch_enabled": ("true", "Activer le batch automatique quotidien"),
         "batch_hour": ("3", "Heure d'execution du batch (0-23)"),
         "daily_api_limit": ("5000", "Limite quotidienne d'appels API eBay"),
+        "low_value_threshold": ("10", "Seuil en euros pour cartes basse valeur"),
+        "low_value_refresh_days": ("60", "Frequence de rafraichissement (jours) pour cartes basse valeur"),
+        "max_error_retries": ("3", "Nombre d'erreurs avant de passer en basse priorite"),
     }
 
     @classmethod

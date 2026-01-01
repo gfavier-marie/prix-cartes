@@ -1887,6 +1887,42 @@ def create_app() -> Flask:
                 daily_api_limit = "5000"
             Settings.set_value(session, "daily_api_limit", daily_api_limit)
 
+            # low_value_threshold (seuil basse valeur en euros)
+            low_value_threshold = request.form.get("low_value_threshold", "10")
+            try:
+                threshold_float = float(low_value_threshold)
+                if threshold_float < 0:
+                    low_value_threshold = "10"
+                else:
+                    low_value_threshold = str(threshold_float)
+            except ValueError:
+                low_value_threshold = "10"
+            Settings.set_value(session, "low_value_threshold", low_value_threshold)
+
+            # low_value_refresh_days (frequence rafraichissement basse valeur)
+            low_value_refresh_days = request.form.get("low_value_refresh_days", "60")
+            try:
+                refresh_int = int(low_value_refresh_days)
+                if refresh_int < 1:
+                    low_value_refresh_days = "60"
+                else:
+                    low_value_refresh_days = str(refresh_int)
+            except ValueError:
+                low_value_refresh_days = "60"
+            Settings.set_value(session, "low_value_refresh_days", low_value_refresh_days)
+
+            # max_error_retries (nb erreurs avant basse priorite)
+            max_error_retries = request.form.get("max_error_retries", "3")
+            try:
+                retries_int = int(max_error_retries)
+                if retries_int < 1:
+                    max_error_retries = "3"
+                else:
+                    max_error_retries = str(retries_int)
+            except ValueError:
+                max_error_retries = "3"
+            Settings.set_value(session, "max_error_retries", max_error_retries)
+
             session.commit()
 
         flash("Parametres sauvegardes avec succes", "success")
