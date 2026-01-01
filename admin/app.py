@@ -134,6 +134,7 @@ def create_app() -> Flask:
 
         # Filtre erreur
         has_error = request.args.get("has_error", "")
+        error_hours = request.args.get("error_hours", "")
 
         with get_session() as session:
             # Subquery pour le dernier snapshot par carte
@@ -206,6 +207,15 @@ def create_app() -> Flask:
             # Filtre erreur
             if has_error == "yes":
                 query = query.filter(Card.last_error != None)
+                # Filtre sur la date de l'erreur
+                if error_hours:
+                    try:
+                        hours = int(error_hours)
+                        from datetime import datetime, timedelta
+                        error_since = datetime.utcnow() - timedelta(hours=hours)
+                        query = query.filter(Card.last_error_at >= error_since)
+                    except ValueError:
+                        pass
             elif has_error == "no":
                 query = query.filter(Card.last_error == None)
 
@@ -228,6 +238,7 @@ def create_app() -> Flask:
                 date_to=date_to,
                 months_ago=months_ago,
                 has_error=has_error,
+                error_hours=error_hours,
                 series_sets=series_sets,
             )
 
@@ -245,6 +256,7 @@ def create_app() -> Flask:
             'date_to': request.args.get('date_to', ''),
             'months_ago': request.args.get('months_ago', ''),
             'has_error': request.args.get('has_error', ''),
+            'error_hours': request.args.get('error_hours', ''),
         }
         # Construire l'URL de retour avec les filtres
         back_params = '&'.join(f'{k}={v}' for k, v in list_params.items() if v)
@@ -396,6 +408,7 @@ def create_app() -> Flask:
             'date_to': request.args.get('date_to', ''),
             'months_ago': request.args.get('months_ago', ''),
             'has_error': request.args.get('has_error', ''),
+            'error_hours': request.args.get('error_hours', ''),
         }
 
         runner = BatchRunner()
@@ -1265,19 +1278,19 @@ def create_app() -> Flask:
         writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
 
         # Header avec toutes les colonnes
-        writer.writerow(['id', 'name', 'local_id', 'set_name', 'set_id', 'set_cardcount_official', 'variant', 'card_number_format', 'ebay_query'])
+        writer.writerow(['id', 'name', 'local_id', 'set_name', 'set_id', 'set_cardcount_official', 'variant', 'card_number_format', 'card_number_padded', 'ebay_query'])
 
         # Exemples commentes
-        writer.writerow(['# Modification: remplir id, les autres colonnes sont optionnelles', '', '', '', '', '', '', '', ''])
-        writer.writerow(['# Exemple modification:', '', '', '', '', '', '', '', ''])
-        writer.writerow(['123', 'Pikachu', '25', '', '', '', '', '', ''])
-        writer.writerow(['ecard2-H01-HOLO', '', 'H01', '', '', 'H32', '', 'LOCAL_ONLY', ''])
-        writer.writerow(['svp-001-NORMAL', '', '', '', '', '', '', 'PROMO', ''])
-        writer.writerow(['# Creation: laisser id vide, remplir name, local_id, set_id obligatoires', '', '', '', '', '', '', '', ''])
-        writer.writerow(['# Exemple creation:', '', '', '', '', '', '', '', ''])
-        writer.writerow(['', 'Ma Nouvelle Carte', '001', '', 'sv08', '', 'NORMAL', 'LOCAL_TOTAL', ''])
-        writer.writerow(['', 'Carte Promo', '002', '', 'svp', '', 'NORMAL', 'PROMO', ''])
-        writer.writerow(['', 'Carte Reverse', '003', '', 'sv08', '', 'REVERSE', '', 'Carte Reverse 003 pokemon'])
+        writer.writerow(['# Modification: remplir id, les autres colonnes sont optionnelles', '', '', '', '', '', '', '', '', ''])
+        writer.writerow(['# Exemple modification:', '', '', '', '', '', '', '', '', ''])
+        writer.writerow(['123', 'Pikachu', '25', '', '', '', '', '', '', ''])
+        writer.writerow(['ecard2-H01-HOLO', '', 'H01', '', '', 'H32', '', 'LOCAL_ONLY', '', ''])
+        writer.writerow(['svp-001-NORMAL', '', '', '', '', '', '', 'PROMO', 'true', ''])
+        writer.writerow(['# Creation: laisser id vide, remplir name, local_id, set_id obligatoires', '', '', '', '', '', '', '', '', ''])
+        writer.writerow(['# Exemple creation:', '', '', '', '', '', '', '', '', ''])
+        writer.writerow(['', 'Ma Nouvelle Carte', '001', '', 'sv08', '', 'NORMAL', 'LOCAL_TOTAL', '', ''])
+        writer.writerow(['', 'Carte Promo', '002', '', 'svp', '', 'NORMAL', 'PROMO', 'true', ''])
+        writer.writerow(['', 'Carte Reverse', '003', '', 'sv08', '', 'REVERSE', '', '', 'Carte Reverse 003 pokemon'])
 
         output.seek(0)
         csv_content = '\ufeff' + output.getvalue()
