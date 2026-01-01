@@ -13,7 +13,7 @@ from rich.progress import Progress, TaskID, SpinnerColumn, TextColumn, BarColumn
 
 from sqlalchemy.orm import Session
 
-from ..models import Card, MarketSnapshot, BatchRun, BatchMode, AnchorSource, ApiUsage, Variant, Settings
+from ..models import Card, Set, MarketSnapshot, BatchRun, BatchMode, AnchorSource, ApiUsage, Variant, Settings
 from ..database import get_session, get_db_session
 from ..config import get_config
 from ..ebay import EbayQueryBuilder, EbayWorker
@@ -296,6 +296,11 @@ class BatchRunner:
         from sqlalchemy import func, case
         from sqlalchemy.orm import aliased
 
+        # Recuperer les series/sets exclus depuis la config
+        config = get_config()
+        excluded_series = config.tcgdex.excluded_series or []
+        excluded_sets = config.tcgdex.excluded_sets or []
+
         if prioritize_oldest:
             # Subquery pour trouver la date du dernier snapshot de chaque carte
             latest_snapshot = session.query(
@@ -310,7 +315,9 @@ class BatchRunner:
             from datetime import timedelta
             error_cooldown = datetime.utcnow() - timedelta(hours=24)
 
-            query = session.query(Card).outerjoin(
+            query = session.query(Card).join(
+                Set, Card.set_id == Set.id
+            ).outerjoin(
                 latest_snapshot,
                 Card.id == latest_snapshot.c.card_id
             ).filter(
@@ -326,13 +333,19 @@ class BatchRunner:
                 latest_snapshot.c.last_snapshot_date.asc()
             )
         else:
-            query = session.query(Card).filter(Card.is_active == True)
+            query = session.query(Card).join(Set, Card.set_id == Set.id).filter(Card.is_active == True)
 
         if card_ids:
             query = query.filter(Card.id.in_(card_ids))
 
         if set_id:
             query = query.filter(Card.set_id == set_id)
+
+        # Exclure les series et sets masques dans la config
+        if excluded_series:
+            query = query.filter(~Set.serie_id.in_(excluded_series))
+        if excluded_sets:
+            query = query.filter(~Set.id.in_(excluded_sets))
 
         if limit:
             query = query.limit(limit)
