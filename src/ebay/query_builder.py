@@ -7,6 +7,7 @@ Syntaxe eBay Browse API:
 - Max 100 caracteres
 """
 
+import re
 from typing import Optional
 from ..models import Card, Variant, CardNumberFormat
 
@@ -112,6 +113,20 @@ class EbayQueryBuilder:
         # Supprimer les caracteres speciaux (δ, ☆, etc.)
         for char in self.SPECIAL_CHARS:
             name = name.replace(char, '')
+
+        # Transformer "M " en debut de nom en "Mega " (ex: "M Rayquaza" -> "Mega Rayquaza")
+        # Note: "M-" est deja devenu "M " apres le replace("-", " ")
+        if name.startswith("M "):
+            name = "Mega " + name[2:]
+
+        # Retirer "de Team X" du nom (ex: "Cacturne de Team Aqua" -> "Cacturne")
+        # Note: seulement quand precede de "de", pas "Et voila les Team Rocket !"
+        name = re.sub(r'\s+de\s+team\s+\w+', '', name, flags=re.IGNORECASE)
+
+        # Retirer "Niv. XX" ou "niv XX" en fin de nom (XX = chiffres)
+        # MAIS garder "niv.X" et "NIV X" (niveau X = lettre X, cartes speciales)
+        name = re.sub(r'\s+niv[.\s]+\d+\s*$', '', name, flags=re.IGNORECASE)
+
         # Nettoyer les espaces multiples
         while '  ' in name:
             name = name.replace('  ', ' ')

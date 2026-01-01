@@ -23,42 +23,30 @@
     </div>
 </div>
 
-{% if api_usage %}
+{% if ebay_usage %}
 <div class="card">
     <div class="card-header">
         <h2>Usage API eBay</h2>
-        {% if api_usage.is_limit_reached %}
+        {% if ebay_usage.remaining == 0 %}
         <span class="badge badge-error">Limite atteinte</span>
-        {% elif api_usage.percent > 80 %}
-        <span class="badge badge-warning">{{ api_usage.percent }}%</span>
+        {% elif ebay_usage.percent > 80 %}
+        <span class="badge badge-warning">{{ ebay_usage.percent }}%</span>
         {% else %}
-        <span class="badge badge-ok">{{ api_usage.percent }}%</span>
+        <span class="badge badge-ok">{{ ebay_usage.percent }}%</span>
         {% endif %}
     </div>
     <div class="progress-bar-container" style="background: #333; border-radius: 4px; height: 24px; margin: 12px 0; position: relative; overflow: hidden;">
-        <div class="progress-bar-fill" style="background: {% if api_usage.percent > 80 %}#ef4444{% elif api_usage.percent > 50 %}#f59e0b{% else %}#22c55e{% endif %}; height: 100%; width: {{ api_usage.percent }}%; transition: width 0.3s;"></div>
+        <div class="progress-bar-fill" style="background: {% if ebay_usage.percent > 80 %}#ef4444{% elif ebay_usage.percent > 50 %}#f59e0b{% else %}#22c55e{% endif %}; height: 100%; width: {{ ebay_usage.percent }}%; transition: width 0.3s;"></div>
         <span style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: white; font-size: 12px; font-weight: 500;">
-            {{ "{:,}".format(api_usage.today_count).replace(",", " ") }} / {{ "{:,}".format(api_usage.daily_limit).replace(",", " ") }} appels
+            {{ "{:,}".format(ebay_usage.count).replace(",", " ") }} / {{ "{:,}".format(ebay_usage.limit).replace(",", " ") }} appels
         </span>
     </div>
     <div style="display: flex; justify-content: space-between; color: #888; font-size: 13px;">
-        <span>Restants: {{ "{:,}".format(api_usage.remaining).replace(",", " ") }}</span>
-        <span>Limite quotidienne: {{ "{:,}".format(api_usage.daily_limit).replace(",", " ") }}</span>
+        <span>Restants: {{ "{:,}".format(ebay_usage.remaining).replace(",", " ") }}</span>
+        {% if ebay_usage.reset_formatted %}
+        <span>Reset: {{ ebay_usage.reset_formatted }}</span>
+        {% endif %}
     </div>
-    {% if api_usage.history|length > 1 %}
-    <details style="margin-top: 12px;">
-        <summary style="cursor: pointer; color: #888; font-size: 13px;">Historique (7 derniers jours)</summary>
-        <table class="info-table" style="margin-top: 8px;">
-            {% for h in api_usage.history %}
-            <tr>
-                <td>{{ h.date }}</td>
-                <td>{{ "{:,}".format(h.count).replace(",", " ") }} appels</td>
-                <td>{{ h.percent }}%</td>
-            </tr>
-            {% endfor %}
-        </table>
-    </details>
-    {% endif %}
 </div>
 {% endif %}
 

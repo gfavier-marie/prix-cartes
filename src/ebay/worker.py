@@ -60,6 +60,9 @@ class CollectionResult:
     # Stats pour les annonces reverse trouvees (si carte non-REVERSE)
     reverse_stats: Optional[PriceStats] = None
     reverse_items: list[EbayItem] = field(default_factory=list)
+    # Stats pour les annonces graded trouvees (PSA, CGC, PCA, etc.)
+    graded_stats: Optional[PriceStats] = None
+    graded_items: list[EbayItem] = field(default_factory=list)
 
 
 class EbayWorker:
@@ -92,6 +95,29 @@ class EbayWorker:
         """Verifie si un item est une carte reverse basé sur le titre."""
         title_lower = item.title.lower()
         return any(kw in title_lower for kw in self.REVERSE_KEYWORDS)
+
+    # Keywords pour identifier les cartes gradees (meme que dans client.py)
+    # Inclut les patterns avec espace, tiret ET chiffres (psa9, cgc10, etc.)
+    GRADED_KEYWORDS = [
+        # Avec espace ou tiret
+        "psa ", "psa-", "cgc ", "cgc-", "bgs ", "bgs-", "bcc ", "bcc-",
+        "pca ", "pca-", "pcg ", "pcg-", "ace ", "ace-", "mga ", "mga-", "sgc ", "sgc-",
+        "ccc ", "ccc-", " pg ", " pg-",
+        # Avec chiffres directement (grades 1-10)
+        "psa1", "psa2", "psa3", "psa4", "psa5", "psa6", "psa7", "psa8", "psa9", "psa10",
+        "cgc1", "cgc2", "cgc3", "cgc4", "cgc5", "cgc6", "cgc7", "cgc8", "cgc9", "cgc10",
+        "bgs1", "bgs2", "bgs3", "bgs4", "bgs5", "bgs6", "bgs7", "bgs8", "bgs9", "bgs10",
+        "pca1", "pca2", "pca3", "pca4", "pca5", "pca6", "pca7", "pca8", "pca9", "pca10",
+        "ccc1", "ccc2", "ccc3", "ccc4", "ccc5", "ccc6", "ccc7", "ccc8", "ccc9", "ccc10",
+        "sgc1", "sgc2", "sgc3", "sgc4", "sgc5", "sgc6", "sgc7", "sgc8", "sgc9", "sgc10",
+        # Mots generiques
+        "graded", "slab", "gradee", "gradée",
+    ]
+
+    def _is_graded_item(self, item: EbayItem) -> bool:
+        """Verifie si un item est une carte gradee basé sur le titre."""
+        title_lower = item.title.lower()
+        return any(kw in title_lower for kw in self.GRADED_KEYWORDS)
 
     def collect_for_card(self, card: Card) -> CollectionResult:
         """
@@ -156,11 +182,30 @@ class EbayWorker:
             result.active_count = search_result.total
             result.warnings = search_result.warnings
 
+            # Separer les items graded (PSA, CGC, etc.) des autres
+            graded_items = []
+            non_graded_items = []
+            for item in search_result.items:
+                if self._is_graded_item(item):
+                    graded_items.append(item)
+                else:
+                    non_graded_items.append(item)
+
+            result.graded_items = graded_items
+
+            # Calculer les stats pour les graded si suffisamment d'items
+            if graded_items:
+                graded_prices = self._normalize_prices(graded_items)
+                if len(graded_prices) >= 1:
+                    result.graded_stats = self._calculate_stats(
+                        graded_prices, len(graded_items), graded_items
+                    )
+
             # Pour tous les variants SAUF REVERSE: separer les items normal et reverse
             if not is_reverse:
                 normal_items = []
                 reverse_items = []
-                for item in search_result.items:
+                for item in non_graded_items:
                     if self._is_reverse_item(item):
                         reverse_items.append(item)
                     else:
@@ -177,7 +222,7 @@ class EbayWorker:
                             reverse_prices, len(reverse_items), reverse_items
                         )
             else:
-                result.items = search_result.items
+                result.items = non_graded_items
 
             # Si pas d'items normaux mais des reverse: on utilise les reverse comme items principaux
             if not result.items and result.reverse_items:
@@ -438,6 +483,20 @@ class EbayWorker:
             snapshot.reverse_age_median_days = result.reverse_stats.age_median_days
             snapshot.reverse_pct_recent_7d = result.reverse_stats.pct_recent_7d
 
+        # Stats graded (PSA, CGC, PCA, etc.)
+        if result.graded_stats:
+            snapshot.graded_sample_size = result.graded_stats.sample_size
+            snapshot.graded_p10 = result.graded_stats.p10
+            snapshot.graded_p20 = result.graded_stats.p20
+            snapshot.graded_p50 = result.graded_stats.p50
+            snapshot.graded_p80 = result.graded_stats.p80
+            snapshot.graded_p90 = result.graded_stats.p90
+            snapshot.graded_dispersion = result.graded_stats.dispersion
+            snapshot.graded_cv = result.graded_stats.cv
+            snapshot.graded_consensus_score = result.graded_stats.consensus_score
+            snapshot.graded_age_median_days = result.graded_stats.age_median_days
+            snapshot.graded_pct_recent_7d = result.graded_stats.pct_recent_7d
+
         if result.anchor_price:
             snapshot.anchor_price = result.anchor_price
 
@@ -500,6 +559,25 @@ class EbayWorker:
                     "listing_date": item.listing_date,
                 }
                 for item in result.reverse_items[:100]
+            ]
+
+        # Stocker les annonces graded separement
+        if result.graded_items:
+            meta["graded_listings"] = [
+                {
+                    "item_id": item.item_id,
+                    "title": item.title,
+                    "price": item.price,
+                    "currency": item.currency,
+                    "shipping": item.shipping_cost,
+                    "effective_price": item.effective_price,
+                    "url": item.item_web_url,
+                    "condition": item.condition,
+                    "seller": item.seller_username,
+                    "image": item.image_url,
+                    "listing_date": item.listing_date,
+                }
+                for item in result.graded_items[:100]
             ]
 
         snapshot.set_raw_meta(meta)

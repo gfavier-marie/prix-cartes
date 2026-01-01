@@ -78,6 +78,9 @@ def create_app() -> Flask:
     @app.route("/")
     def index():
         """Page d'accueil avec stats."""
+        from src.ebay.usage_tracker import refresh_rate_limits_from_ebay
+        from datetime import datetime
+
         with get_session() as session:
             total_cards = session.query(Card).filter(Card.is_active == True).count()
             cards_with_price = session.query(BuyPrice).count()
@@ -86,15 +89,28 @@ def create_app() -> Flask:
             # Dernier batch
             last_batch = session.query(BatchRun).order_by(BatchRun.started_at.desc()).first()
 
-            # Usage API eBay
-            api_usage = get_ebay_usage_summary(session)
+            # Usage API eBay - appel reel
+            ebay_usage = refresh_rate_limits_from_ebay()
+            if ebay_usage:
+                # Formatter le reset
+                if ebay_usage.get("reset"):
+                    try:
+                        reset_dt = datetime.fromisoformat(ebay_usage["reset"].replace("Z", "+00:00"))
+                        ebay_usage["reset_formatted"] = reset_dt.strftime("%d/%m %H:%M")
+                    except Exception:
+                        ebay_usage["reset_formatted"] = ebay_usage["reset"]
+                # Calculer le pourcentage
+                if ebay_usage.get("limit") and ebay_usage["limit"] > 0:
+                    ebay_usage["percent"] = int((ebay_usage.get("count", 0) / ebay_usage["limit"]) * 100)
+                else:
+                    ebay_usage["percent"] = 0
 
             return render_template("index.html",
                 total_cards=total_cards,
                 cards_with_price=cards_with_price,
                 low_conf=low_conf,
                 last_batch=last_batch,
-                api_usage=api_usage,
+                ebay_usage=ebay_usage,
             )
 
     @app.route("/cards")
@@ -330,6 +346,7 @@ def create_app() -> Flask:
                 sold_listings=sold_listings,
                 sold_stats=sold_stats,
                 back_url=back_url,
+                back_params=back_params,
                 list_params=list_params,
             )
 
@@ -368,6 +385,19 @@ def create_app() -> Flask:
     @app.route("/cards/<int:card_id>/reprocess", methods=["POST"])
     def card_reprocess(card_id: int):
         """Retraiter une carte."""
+        # Conserver les filtres de la liste
+        list_params = {
+            'page': request.args.get('page', ''),
+            'search': request.args.get('search', ''),
+            'has_data': request.args.get('has_data', ''),
+            'set': request.args.get('set', ''),
+            'date_filter': request.args.get('date_filter', ''),
+            'date_from': request.args.get('date_from', ''),
+            'date_to': request.args.get('date_to', ''),
+            'months_ago': request.args.get('months_ago', ''),
+            'has_error': request.args.get('has_error', ''),
+        }
+
         runner = BatchRunner()
         success = runner.reprocess_card(card_id)
 
@@ -376,7 +406,8 @@ def create_app() -> Flask:
         else:
             flash("Erreur lors du retraitement", "error")
 
-        return redirect(url_for("card_detail", card_id=card_id))
+        # Rediriger avec les filtres preserves
+        return redirect(url_for("card_detail", card_id=card_id, **{k: v for k, v in list_params.items() if v}))
 
     @app.route("/anomalies")
     def anomalies():
@@ -907,12 +938,29 @@ def create_app() -> Flask:
                     for item in result.reverse_items[:50]
                 ] if result.reverse_items else []
 
+                # Annonces graded (PSA, CGC, PCA, etc.)
+                graded_listings = [
+                    {
+                        "title": item.title,
+                        "price": item.price,
+                        "shipping": item.shipping_cost,
+                        "currency": item.currency,
+                        "url": item.item_web_url,
+                        "condition": item.condition,
+                        "seller": item.seller_username,
+                        "image": item.image_url,
+                        "listing_date": item.listing_date,
+                    }
+                    for item in result.graded_items[:50]
+                ] if result.graded_items else []
+
                 return jsonify({
                     "success": True,
                     "query": result.query_used,
                     "total": result.active_count,
                     "listings": listings,
                     "reverse_listings": reverse_listings,
+                    "graded_listings": graded_listings,
                     "stats": {
                         "p10": result.stats.p10 if result.stats else None,
                         "p20": result.stats.p20 if result.stats else None,
@@ -942,14 +990,16 @@ def create_app() -> Flask:
                 meta = snapshot.get_raw_meta()
                 listings = meta.get("listings", [])
                 reverse_listings = meta.get("reverse_listings", [])
+                graded_listings = meta.get("graded_listings", [])
 
                 return jsonify({
                     "success": True,
                     "query": meta.get("query"),
-                    "snapshot_date": str(snapshot.as_of_date),
+                    "snapshot_date": snapshot.created_at.strftime('%d/%m/%y %H:%M') if snapshot.created_at else str(snapshot.as_of_date),
                     "total": snapshot.active_count,
                     "listings": listings,
                     "reverse_listings": reverse_listings,
+                    "graded_listings": graded_listings,
                     "stats": {
                         "p10": snapshot.p10,
                         "p20": snapshot.p20,
@@ -1752,16 +1802,32 @@ def create_app() -> Flask:
     @app.route("/settings")
     def settings_page():
         """Page de configuration des parametres."""
+        from src.ebay.usage_tracker import refresh_rate_limits_from_ebay
+        from datetime import datetime
+
         with get_session() as session:
             # Recuperer tous les settings
             settings = Settings.get_all(session)
 
-            # Usage API du jour
-            api_usage = get_ebay_usage_summary(session)
+            # Usage API eBay - appel reel
+            ebay_usage = refresh_rate_limits_from_ebay()
+            if ebay_usage:
+                # Formatter le reset
+                if ebay_usage.get("reset"):
+                    try:
+                        reset_dt = datetime.fromisoformat(ebay_usage["reset"].replace("Z", "+00:00"))
+                        ebay_usage["reset_formatted"] = reset_dt.strftime("%d/%m %H:%M")
+                    except Exception:
+                        ebay_usage["reset_formatted"] = ebay_usage["reset"]
+                # Calculer le pourcentage
+                if ebay_usage.get("limit") and ebay_usage["limit"] > 0:
+                    ebay_usage["percent"] = int((ebay_usage.get("count", 0) / ebay_usage["limit"]) * 100)
+                else:
+                    ebay_usage["percent"] = 0
 
             return render_template("settings.html",
                 settings=settings,
-                api_usage=api_usage,
+                ebay_usage=ebay_usage,
             )
 
     @app.route("/settings", methods=["POST"])

@@ -280,6 +280,19 @@ class MarketSnapshot(Base):
     reverse_age_median_days = Column(Float, nullable=True)
     reverse_pct_recent_7d = Column(Float, nullable=True)
 
+    # Stats pour les annonces GRADED (PSA, CGC, PCA, etc.)
+    graded_sample_size = Column(Integer, nullable=True)
+    graded_p10 = Column(Float, nullable=True)
+    graded_p20 = Column(Float, nullable=True)
+    graded_p50 = Column(Float, nullable=True)
+    graded_p80 = Column(Float, nullable=True)
+    graded_p90 = Column(Float, nullable=True)
+    graded_dispersion = Column(Float, nullable=True)
+    graded_cv = Column(Float, nullable=True)
+    graded_consensus_score = Column(Float, nullable=True)
+    graded_age_median_days = Column(Float, nullable=True)
+    graded_pct_recent_7d = Column(Float, nullable=True)
+
     # Ancre finale
     anchor_price = Column(Float, nullable=True)
     anchor_source = Column(Enum(AnchorSource), nullable=True)

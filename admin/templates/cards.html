@@ -254,8 +254,8 @@ function toggleDateInputs() {
                     {% endif %}
                 </td>
                 <td>
-                    {% if snapshot and snapshot.as_of_date %}
-                        <span class="text-secondary" style="font-size: 12px;">{{ snapshot.as_of_date.strftime('%d/%m/%y') }}</span>
+                    {% if snapshot and snapshot.created_at %}
+                        <span class="text-secondary" style="font-size: 12px;">{{ snapshot.created_at.strftime('%d/%m %H:%M') }}</span>
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}
@@ -270,6 +270,9 @@ function toggleDateInputs() {
                 <td>
                     {% if card.last_error %}
                         <span class="badge badge-error" title="{{ card.last_error }}" style="cursor: help; font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">{{ card.last_error[:20] }}{% if card.last_error|length > 20 %}...{% endif %}</span>
+                        {% if card.last_error_at %}
+                        <div style="font-size: 10px; color: #888;">{{ card.last_error_at.strftime('%d/%m %H:%M') }}</div>
+                        {% endif %}
                     {% else %}
                         <span class="text-muted">—</span>
                     {% endif %}

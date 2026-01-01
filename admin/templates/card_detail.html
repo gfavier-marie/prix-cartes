@@ -10,7 +10,7 @@
 
 <div style="display: flex; gap: 12px; margin-bottom: 30px;">
     <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning">Éditer la requête</a>
-    <form method="POST" action="{{ url_for('card_reprocess', card_id=card.id) }}" style="display: inline;">
+    <form method="POST" action="{{ url_for('card_reprocess', card_id=card.id) }}{% if back_params %}?{{ back_params }}{% endif %}" style="display: inline;">
         <button type="submit" class="btn btn-primary">Collecter les données eBay</button>
     </form>
     {% if card.effective_ebay_query %}
@@ -554,7 +554,7 @@ document.addEventListener('DOMContentLoaded', () => loadListings(false));
                 {% if snapshots[0].reverse_consensus_score is not none %}<div>Consensus: <span class="{% if snapshots[0].reverse_consensus_score >= 70 %}badge badge-ok{% elif snapshots[0].reverse_consensus_score < 50 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_consensus_score) }}%</span></div>{% endif %}
                 {% if snapshots[0].reverse_age_median_days is not none %}<div>Âge médian: <span class="{% if snapshots[0].reverse_age_median_days > 30 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_age_median_days) }}j</span></div>{% endif %}
                 {% if snapshots[0].reverse_pct_recent_7d is not none %}<div>< 7j: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_pct_recent_7d) }}%</span></div>{% endif %}
-                <div>Snapshot: {{ snapshots[0].as_of_date }}</div>
+                <div>Snapshot: {{ snapshots[0].created_at.strftime('%d/%m/%y %H:%M') if snapshots[0].created_at else snapshots[0].as_of_date }}</div>
             </div>
         </div>
         <!-- Liste des annonces reverse -->
@@ -590,6 +590,99 @@ document.addEventListener('DOMContentLoaded', () => loadListings(false));
                 <tbody>`;
 
             for (const listing of reverseListings) {
+                const basePrice = listing.price || 0;
+                const shipping = listing.shipping || 0;
+                const title = listing.title || '';
+                const url = listing.url || '';
+                const image = listing.image || '';
+                let listingDate = '';
+                if (listing.listing_date) {
+                    const d = new Date(listing.listing_date);
+                    listingDate = d.toLocaleDateString('fr-FR');
+                }
+
+                html += `<tr>
+                    <td style="padding: 4px;">
+                        ${image ? `<img src="${image}" alt="" onclick="openPhotoModal('${image}')" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: var(--bg-secondary); cursor: pointer;">` : '<div style="width: 50px; height: 50px; background: var(--bg-secondary); border-radius: 4px;"></div>'}
+                    </td>
+                    <td>
+                        <div class="price" style="font-weight: 600;">${basePrice.toFixed(2)} €</div>
+                        ${shipping > 0 ? `<div style="font-size: 11px; color: var(--text-secondary);">+ ${shipping.toFixed(2)} € port</div>` : '<div style="font-size: 11px; color: var(--accent-green);">Port gratuit</div>'}
+                    </td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${title}">${title}</td>
+                    <td class="mono" style="font-size: 12px; color: var(--text-secondary);">${listingDate}</td>
+                    <td>
+                        ${url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">Voir</a>` : '—'}
+                    </td>
+                </tr>`;
+            }
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        })
+        .catch(() => {});
+})();
+</script>
+{% endif %}
+
+{% if snapshots and snapshots[0].graded_sample_size %}
+<!-- Section Stats Graded -->
+<div class="card">
+    <div class="card-header">
+        <h2 style="margin: 0;">Annonces Gradées (PSA, CGC, etc.)</h2>
+    </div>
+    <div id="graded-listings-container">
+        <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
+                <div><strong>{{ snapshots[0].graded_sample_size }}</strong> annonces</div>
+                {% if snapshots[0].graded_p10 %}<div>p10: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p10) }} €</span></div>{% endif %}
+                {% if snapshots[0].graded_p20 %}<div>p20: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(snapshots[0].graded_p20) }} €</span></div>{% endif %}
+                {% if snapshots[0].graded_p50 %}<div>p50: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p50) }} €</span></div>{% endif %}
+                {% if snapshots[0].graded_p80 %}<div>p80: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p80) }} €</span></div>{% endif %}
+                {% if snapshots[0].graded_p90 %}<div>p90: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p90) }} €</span></div>{% endif %}
+            </div>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
+                {% if snapshots[0].graded_dispersion %}<div>Dispersion: <span class="{% if snapshots[0].graded_dispersion > 4 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.2f"|format(snapshots[0].graded_dispersion) }}</span></div>{% endif %}
+                {% if snapshots[0].graded_cv is not none %}<div>CV: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_cv * 100) }}%</span></div>{% endif %}
+                {% if snapshots[0].graded_consensus_score is not none %}<div>Consensus: <span class="{% if snapshots[0].graded_consensus_score >= 70 %}badge badge-ok{% elif snapshots[0].graded_consensus_score < 50 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_consensus_score) }}%</span></div>{% endif %}
+                {% if snapshots[0].graded_age_median_days is not none %}<div>Âge médian: <span class="{% if snapshots[0].graded_age_median_days > 30 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_age_median_days) }}j</span></div>{% endif %}
+                {% if snapshots[0].graded_pct_recent_7d is not none %}<div>< 7j: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_pct_recent_7d) }}%</span></div>{% endif %}
+                <div>Snapshot: {{ snapshots[0].created_at.strftime('%d/%m/%y %H:%M') if snapshots[0].created_at else snapshots[0].as_of_date }}</div>
+            </div>
+        </div>
+        <!-- Liste des annonces graded -->
+        <div id="graded-listings-table" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<script>
+// Charger les annonces graded depuis les metadata
+(function() {
+    const cardId = {{ card.id }};
+    fetch(`/api/cards/${cardId}/listings`)
+        .then(r => r.json())
+        .then(data => {
+            const gradedListings = data.graded_listings || [];
+            const container = document.getElementById('graded-listings-table');
+
+            if (gradedListings.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px;">Aucune annonce gradée stockée</p>';
+                return;
+            }
+
+            let html = `<table style="margin: 0;">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">Photo</th>
+                        <th style="width: 100px;">Prix</th>
+                        <th>Titre</th>
+                        <th style="width: 100px;">Date</th>
+                        <th style="width: 80px;">Lien</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+            for (const listing of gradedListings) {
                 const basePrice = listing.price || 0;
                 const shipping = listing.shipping || 0;
                 const title = listing.title || '';

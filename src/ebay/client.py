@@ -135,20 +135,34 @@ class EbayClient:
             "Content-Type": "application/json",
         }
 
-    # Mots a exclure dans les titres (lots, graded, etc.)
+    # Mots a exclure dans les titres (lots, etc.) - SANS les graded
     TITLE_EXCLUSIONS_BASE = [
         # Lots et bundles
         "bundle", "collection", "x10", "x20", "x50", "x100",
-        # Cartes gradees (toutes les companies)
-        "psa ", "psa-", "cgc ", "cgc-", "bgs ", "bgs-", "bcc ", "bcc-",
-        "pca ", "pca-", "pcg ", "pcg-", "ace ", "ace-", "mga ", "mga-", "sgc ", "sgc-",
-        "ccc ", "ccc-", "graded", "slab", "gradee", "gradée", " pg ", " pg-",
         # Faux / custom
         "proxy", "orica", "custom", "fake",
         # Codes online
         "code card", "online code", "code online",
         # Autres langues
         "japanese", "japan", "jpn", "anglais", "english", "german", "italian",
+    ]
+
+    # Keywords pour identifier les cartes gradees (toutes les companies)
+    # Inclut les patterns avec espace, tiret ET chiffres (psa9, cgc10, etc.)
+    GRADED_KEYWORDS = [
+        # Avec espace ou tiret
+        "psa ", "psa-", "cgc ", "cgc-", "bgs ", "bgs-", "bcc ", "bcc-",
+        "pca ", "pca-", "pcg ", "pcg-", "ace ", "ace-", "mga ", "mga-", "sgc ", "sgc-",
+        "ccc ", "ccc-", " pg ", " pg-",
+        # Avec chiffres directement (grades 1-10)
+        "psa1", "psa2", "psa3", "psa4", "psa5", "psa6", "psa7", "psa8", "psa9", "psa10",
+        "cgc1", "cgc2", "cgc3", "cgc4", "cgc5", "cgc6", "cgc7", "cgc8", "cgc9", "cgc10",
+        "bgs1", "bgs2", "bgs3", "bgs4", "bgs5", "bgs6", "bgs7", "bgs8", "bgs9", "bgs10",
+        "pca1", "pca2", "pca3", "pca4", "pca5", "pca6", "pca7", "pca8", "pca9", "pca10",
+        "ccc1", "ccc2", "ccc3", "ccc4", "ccc5", "ccc6", "ccc7", "ccc8", "ccc9", "ccc10",
+        "sgc1", "sgc2", "sgc3", "sgc4", "sgc5", "sgc6", "sgc7", "sgc8", "sgc9", "sgc10",
+        # Mots generiques
+        "graded", "slab", "gradee", "gradée",
     ]
 
     # Patterns regex pour mots complets (eviter faux positifs comme "Chamallot")
@@ -184,6 +198,7 @@ class EbayClient:
         filter_titles: bool = True,
         is_first_edition: bool = False,
         is_reverse: Optional[bool] = None,
+        is_graded: Optional[bool] = None,
         card_number: Optional[str] = None,
         card_number_full: Optional[str] = None,
     ) -> EbaySearchResult:
@@ -260,7 +275,7 @@ class EbayClient:
             if item:
                 # Filtrer les titres indesirables
                 if filter_titles and self._should_exclude_title(
-                    item.title, is_first_edition, is_reverse, card_number, card_number_full
+                    item.title, is_first_edition, is_reverse, is_graded, card_number, card_number_full
                 ):
                     continue
                 result.items.append(item)
@@ -279,6 +294,7 @@ class EbayClient:
         title: str,
         is_first_edition: bool = False,
         is_reverse: Optional[bool] = None,
+        is_graded: Optional[bool] = None,
         card_number: Optional[str] = None,
         card_number_full: Optional[str] = None
     ) -> bool:
@@ -298,7 +314,19 @@ class EbayClient:
                 if has_reverse:
                     return True
 
-        # Exclusions de base (lots, graded, etc.)
+        # Filtrage GRADED (None = pas de filtre, on garde tout pour tri ulterieur)
+        if is_graded is not None:
+            has_graded = any(kw in title_lower for kw in self.GRADED_KEYWORDS)
+            if is_graded:
+                # Pour GRADED: exclure si pas de marqueur graded
+                if not has_graded:
+                    return True
+            else:
+                # Pour NON-GRADED: exclure si marqueur graded present
+                if has_graded:
+                    return True
+
+        # Exclusions de base (lots, etc.)
         for exclusion in self.TITLE_EXCLUSIONS_BASE:
             if exclusion in title_lower:
                 return True

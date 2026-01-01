@@ -63,37 +63,30 @@
 
     <div class="card">
         <h2>Usage API eBay</h2>
+        {% if ebay_usage %}
         <table class="info-table">
             <tr>
-                <td>Appels aujourd'hui</td>
+                <td>Appels</td>
                 <td>
-                    <span class="price price-main">{{ api_usage.today_count or 0 }}</span>
-                    / {{ api_usage.daily_limit or settings.daily_api_limit.value }}
+                    <span class="price price-main">{{ ebay_usage.count or 0 }}</span>
+                    / {{ ebay_usage.limit or 5000 }}
+                    <span class="badge {% if ebay_usage.percent > 80 %}badge-error{% elif ebay_usage.percent > 50 %}badge-warning{% else %}badge-ok{% endif %}" style="margin-left: 8px;">{{ ebay_usage.percent }}%</span>
                 </td>
             </tr>
             <tr>
                 <td>Restants</td>
-                <td>{{ api_usage.remaining or (settings.daily_api_limit.value|int - (api_usage.today_count or 0)) }}</td>
+                <td>{{ ebay_usage.remaining or 0 }}</td>
             </tr>
-            {% if api_usage.ebay_count is defined %}
-            <tr>
-                <td>eBay (reel)</td>
-                <td>{{ api_usage.ebay_count }} / {{ api_usage.ebay_limit }}</td>
-            </tr>
-            {% endif %}
-            {% if api_usage.ebay_reset_formatted %}
+            {% if ebay_usage.reset_formatted %}
             <tr>
                 <td>Reset</td>
-                <td>{{ api_usage.ebay_reset_formatted }}</td>
+                <td>{{ ebay_usage.reset_formatted }}</td>
             </tr>
             {% endif %}
         </table>
-
-        <div style="margin-top: 20px;">
-            <button class="btn btn-ghost btn-sm" onclick="refreshUsage()">
-                Rafraichir depuis eBay
-            </button>
-        </div>
+        {% else %}
+        <p class="text-secondary">Impossible de recuperer les donnees eBay</p>
+        {% endif %}
     </div>
 </div>
 
@@ -112,12 +105,4 @@
     </p>
 </div>
 
-<script>
-function refreshUsage() {
-    fetch('/api/usage/ebay/refresh', { method: 'POST' })
-        .then(r => r.json())
-        .then(() => location.reload())
-        .catch(e => alert('Erreur: ' + e));
-}
-</script>
 {% endblock %}
