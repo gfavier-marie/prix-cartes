@@ -387,6 +387,20 @@ class BatchRun(Base):
     # Notes/rapport
     notes = Column(Text, nullable=True)
 
+    # Resultats detailles (JSON) pour export CSV
+    # Format: [{"card_id": int, "tcgdex_id": str, "name": str, "set_id": str, "set_name": str, "status": str, "error": str|null}]
+    results_json = Column(Text, nullable=True)
+
+    def set_results(self, results: list[dict]) -> None:
+        """Stocke les resultats en JSON."""
+        self.results_json = json.dumps(results, ensure_ascii=False, default=str)
+
+    def get_results(self) -> list[dict]:
+        """Recupere les resultats depuis JSON."""
+        if self.results_json:
+            return json.loads(self.results_json)
+        return []
+
     def __repr__(self) -> str:
         return f"<BatchRun {self.id} mode={self.mode.value}>"
 

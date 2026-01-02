@@ -1262,6 +1262,53 @@ def create_app() -> Flask:
             }
         )
 
+    @app.route("/export/batch/<int:batch_id>/csv")
+    def export_batch_csv(batch_id):
+        """Export CSV des resultats d'un batch (succes/echecs avec raisons)."""
+        with get_session() as session:
+            batch = session.query(BatchRun).filter(BatchRun.id == batch_id).first()
+
+            if not batch:
+                flash("Batch non trouve", "error")
+                return redirect(url_for("batches"))
+
+            results = batch.get_results()
+
+            if not results:
+                flash("Aucun resultat disponible pour ce batch (batch ancien ou sans donnees)", "warning")
+                return redirect(url_for("batches"))
+
+            output = io.StringIO()
+            writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+
+            # Header
+            writer.writerow(['tcgdex_id', 'name', 'set_id', 'set_name', 'status', 'error'])
+
+            # Donnees
+            for result in results:
+                writer.writerow([
+                    result.get('tcgdex_id', ''),
+                    result.get('name', ''),
+                    result.get('set_id', ''),
+                    result.get('set_name', ''),
+                    result.get('status', ''),
+                    result.get('error', '') or '',
+                ])
+
+            output.seek(0)
+            csv_content = '\ufeff' + output.getvalue()
+
+            # Nom de fichier avec date du batch
+            filename = f"batch_{batch_id}_{batch.started_at.strftime('%Y%m%d_%H%M')}.csv"
+
+            return Response(
+                csv_content,
+                mimetype='text/csv; charset=utf-8',
+                headers={
+                    'Content-Disposition': f'attachment; filename={filename}'
+                }
+            )
+
     # ===================
     # IMPORT CSV
     # ===================

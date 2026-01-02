@@ -92,6 +92,10 @@ class BatchRunner:
         self._usage_session = None
         self._usage_tracker = None
 
+        # Compteur de session (basé sur eBay)
+        self._starting_ebay_count = 0  # Compteur eBay au démarrage du batch
+        self._session_call_count = 0   # Compteur d'appels pendant ce batch
+
         if track_api_usage:
             self._usage_session = get_db_session()
             # Lire la limite depuis Settings (source unique de verite)
@@ -103,6 +107,9 @@ class BatchRunner:
 
     def _on_api_call(self, count: int = 1) -> None:
         """Callback appele apres chaque appel API."""
+        # Compteur de session (pour verification limite)
+        self._session_call_count += count
+
         if self._usage_tracker and self._usage_session:
             self._usage_tracker.increment(count)
             self._usage_session.commit()
@@ -117,8 +124,7 @@ class BatchRunner:
     def _check_api_limit(self, session: Session) -> bool:
         """Verifie si la limite API quotidienne est atteinte.
 
-        Utilise les vraies valeurs de rate limit eBay ET la limite configuree.
-        La limite la plus restrictive est utilisee.
+        Logique: (compteur eBay initial + appels de ce batch) >= limite configuree
 
         Returns:
             True si la limite est atteinte, False sinon.
@@ -130,16 +136,10 @@ class BatchRunner:
         except ValueError:
             daily_limit = 5000
 
-        # Verifier les rate limits eBay (source de verite pour eBay)
-        ebay_remaining = get_ebay_remaining()
-        if ebay_remaining is not None and ebay_remaining <= 0:
-            return True  # Limite eBay atteinte
+        # Calcul: eBay initial + session = total utilise
+        total_count = self._starting_ebay_count + self._session_call_count
 
-        # Verifier la limite configuree (source de verite pour l'utilisateur)
-        usage = self.get_api_usage_today()
-        today_count = usage.get("today_count", 0)
-
-        if today_count >= daily_limit:
+        if total_count >= daily_limit:
             return True  # Limite configuree atteinte
 
         return False
@@ -177,12 +177,25 @@ class BatchRunner:
         anomalies = AnomalyReport()
         batch_run: Optional[BatchRun] = None
 
-        # Rafraichir les rate limits eBay au demarrage (sans appel API supplementaire)
+        # Rafraichir les rate limits eBay au demarrage
         rate_limits = refresh_rate_limits_from_ebay()
+
+        # Initialiser le compteur de session depuis eBay
+        self._session_call_count = 0
         if rate_limits:
-            console.print(f"[dim]Rate limits eBay: {rate_limits.get('remaining', '?')}/{rate_limits.get('limit', '?')} restants[/dim]")
+            self._starting_ebay_count = rate_limits.get('count', 0)
+            ebay_limit = rate_limits.get('limit', 5000)
+            console.print(f"[dim]eBay: {self._starting_ebay_count}/{ebay_limit} utilisés[/dim]")
+        else:
+            self._starting_ebay_count = 0
+            console.print("[yellow]Impossible de récupérer le compteur eBay, démarrage à 0[/yellow]")
 
         with get_session() as session:
+            # Afficher la limite configuree et le nombre d'appels possibles
+            daily_limit_str = Settings.get_value(session, "daily_api_limit", "5000")
+            daily_limit = int(daily_limit_str)
+            remaining = daily_limit - self._starting_ebay_count
+            console.print(f"[dim]Limite configurée: {daily_limit} -> {remaining} appels possibles[/dim]")
             # Verifier la limite API AVANT de commencer
             if self._check_api_limit(session):
                 console.print("[yellow]Limite API quotidienne deja atteinte, batch non demarre[/yellow]")
@@ -227,6 +240,9 @@ class BatchRunner:
             skipped_sets: set[str] = set()  # sets a ignorer
             MAX_SET_FAILURES = 10
 
+            # Resultats detailles pour export CSV
+            card_results: list[dict] = []
+
             # Traiter chaque carte
             for i, card in enumerate(cards):
                 # Verifier si l'arret a ete demande
@@ -244,6 +260,15 @@ class BatchRunner:
                 if card.set_id in skipped_sets:
                     stats.skipped += 1
                     stats.processed += 1
+                    card_results.append({
+                        "card_id": card.id,
+                        "tcgdex_id": card.tcgdex_id,
+                        "name": card.name,
+                        "set_id": card.set_id,
+                        "set_name": card.set_name,
+                        "status": "skipped",
+                        "error": f"Set {card.set_id} ignore (trop d'echecs)"
+                    })
                     continue
 
                 try:
@@ -254,8 +279,26 @@ class BatchRunner:
                         # Reset compteur du set en cas de succes
                         if card.set_id in set_failures:
                             set_failures[card.set_id] = 0
+                        card_results.append({
+                            "card_id": card.id,
+                            "tcgdex_id": card.tcgdex_id,
+                            "name": card.name,
+                            "set_id": card.set_id,
+                            "set_name": card.set_name,
+                            "status": "success",
+                            "error": None
+                        })
                     elif result == "skipped":
                         stats.skipped += 1
+                        card_results.append({
+                            "card_id": card.id,
+                            "tcgdex_id": card.tcgdex_id,
+                            "name": card.name,
+                            "set_id": card.set_id,
+                            "set_name": card.set_name,
+                            "status": "skipped",
+                            "error": None
+                        })
                     elif result == "failed":
                         stats.failed += 1
                         # Incrementer compteur d'echecs pour ce set
@@ -264,12 +307,31 @@ class BatchRunner:
                             console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
                             skipped_sets.add(card.set_id)
                             stats.skipped_sets.append(card.set_id)
+                        # Recuperer l'erreur depuis la carte
+                        card_results.append({
+                            "card_id": card.id,
+                            "tcgdex_id": card.tcgdex_id,
+                            "name": card.name,
+                            "set_id": card.set_id,
+                            "set_name": card.set_name,
+                            "status": "failed",
+                            "error": card.last_error
+                        })
 
                 except EbayRateLimitError:
                     # Erreur 429: activer le blocage et arreter immediatement
                     console.print("[red]Erreur 429 - Rate limit eBay atteint, arret du batch[/red]")
                     set_rate_limited()
                     stats.stopped_rate_limit = True
+                    card_results.append({
+                        "card_id": card.id,
+                        "tcgdex_id": card.tcgdex_id,
+                        "name": card.name,
+                        "set_id": card.set_id,
+                        "set_name": card.set_name,
+                        "status": "failed",
+                        "error": "Erreur 429 - Rate limit eBay"
+                    })
                     break
 
                 except Exception as e:
@@ -282,6 +344,15 @@ class BatchRunner:
                         console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
                         skipped_sets.add(card.set_id)
                         stats.skipped_sets.append(card.set_id)
+                    card_results.append({
+                        "card_id": card.id,
+                        "tcgdex_id": card.tcgdex_id,
+                        "name": card.name,
+                        "set_id": card.set_id,
+                        "set_name": card.set_name,
+                        "status": "failed",
+                        "error": str(e)
+                    })
 
                 stats.processed += 1
 
@@ -303,12 +374,26 @@ class BatchRunner:
             report = self._generate_report(stats, anomalies)
             batch_run.notes = report
 
+            # Sauvegarder les resultats detailles pour export CSV
+            batch_run.set_results(card_results)
+
             session.commit()
 
-        # Rafraichir les rate limits eBay a la fin du batch
+        # Rafraichir les rate limits eBay a la fin du batch (verification)
         final_limits = refresh_rate_limits_from_ebay()
+
+        # Afficher le resume du batch
+        expected_total = self._starting_ebay_count + self._session_call_count
+        console.print(f"[dim]Batch: {self._session_call_count} appels API ({self._starting_ebay_count} -> {expected_total})[/dim]")
+
         if final_limits:
-            console.print(f"[dim]Rate limits eBay finaux: {final_limits.get('remaining', '?')}/{final_limits.get('limit', '?')} restants[/dim]")
+            ebay_final_count = final_limits.get('count', 0)
+            ebay_limit = final_limits.get('limit', 5000)
+            console.print(f"[dim]eBay final: {ebay_final_count}/{ebay_limit} utilisés[/dim]")
+
+            # Verifier la coherence
+            if ebay_final_count != expected_total:
+                console.print(f"[yellow]Ecart detecte: attendu {expected_total}, eBay {ebay_final_count}[/yellow]")
 
         return stats, anomalies
 
