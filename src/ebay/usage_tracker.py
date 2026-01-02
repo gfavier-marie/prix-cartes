@@ -284,6 +284,29 @@ def clear_rate_limited() -> None:
         pass
 
 
+def get_ebay_remaining() -> Optional[int]:
+    """
+    Retourne le nombre d'appels restants selon eBay (depuis le cache).
+
+    Returns:
+        Le nombre d'appels restants, ou None si le cache n'est pas disponible.
+    """
+    rate_limits = get_cached_rate_limits()
+    if rate_limits and "remaining" in rate_limits:
+        return rate_limits.get("remaining")
+    return None
+
+
+def get_ebay_rate_limit_info() -> Optional[dict]:
+    """
+    Retourne les infos de rate limit eBay depuis le cache.
+
+    Returns:
+        Dict avec count, limit, remaining, reset ou None si pas de cache.
+    """
+    return get_cached_rate_limits()
+
+
 def get_rate_limited_info() -> Optional[dict]:
     """Retourne les infos de blocage si actif."""
     if not is_rate_limited():

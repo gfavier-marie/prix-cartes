@@ -18,7 +18,10 @@ from ..database import get_session, get_db_session
 from ..config import get_config
 from ..ebay import EbayQueryBuilder, EbayWorker
 from ..ebay.client import EbayRateLimitError
-from ..ebay.usage_tracker import EbayUsageTracker, set_rate_limited, is_rate_limited
+from ..ebay.usage_tracker import (
+    EbayUsageTracker, set_rate_limited, is_rate_limited,
+    refresh_rate_limits_from_ebay, get_ebay_remaining, get_ebay_rate_limit_info
+)
 from ..pricing import PriceGuardrails
 
 
@@ -114,17 +117,24 @@ class BatchRunner:
     def _check_api_limit(self, session: Session) -> bool:
         """Verifie si la limite API quotidienne est atteinte.
 
+        Utilise les vraies valeurs de rate limit eBay (depuis le cache).
+        Fallback sur le compteur interne si le cache n'est pas disponible.
+
         Returns:
             True si la limite est atteinte, False sinon.
         """
-        # Recuperer la limite depuis les Settings
+        # Essayer d'utiliser les rate limits eBay (source de verite)
+        ebay_remaining = get_ebay_remaining()
+        if ebay_remaining is not None:
+            return ebay_remaining <= 0
+
+        # Fallback: utiliser le compteur interne
         daily_limit_str = Settings.get_value(session, "daily_api_limit", "5000")
         try:
             daily_limit = int(daily_limit_str)
         except ValueError:
             daily_limit = 5000
 
-        # Recuperer l'usage actuel
         usage = self.get_api_usage_today()
         today_count = usage.get("today_count", 0)
 
@@ -162,6 +172,11 @@ class BatchRunner:
         stats = BatchStats()
         anomalies = AnomalyReport()
         batch_run: Optional[BatchRun] = None
+
+        # Rafraichir les rate limits eBay au demarrage (sans appel API supplementaire)
+        rate_limits = refresh_rate_limits_from_ebay()
+        if rate_limits:
+            console.print(f"[dim]Rate limits eBay: {rate_limits.get('remaining', '?')}/{rate_limits.get('limit', '?')} restants[/dim]")
 
         with get_session() as session:
             # Verifier la limite API AVANT de commencer
@@ -285,6 +300,11 @@ class BatchRunner:
             batch_run.notes = report
 
             session.commit()
+
+        # Rafraichir les rate limits eBay a la fin du batch
+        final_limits = refresh_rate_limits_from_ebay()
+        if final_limits:
+            console.print(f"[dim]Rate limits eBay finaux: {final_limits.get('remaining', '?')}/{final_limits.get('limit', '?')} restants[/dim]")
 
         return stats, anomalies
 
