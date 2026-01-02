@@ -58,6 +58,11 @@ class EbayAPIError(Exception):
     pass
 
 
+class EbayRateLimitError(Exception):
+    """Erreur 429 - Rate limit atteint."""
+    pass
+
+
 class EbayClient:
     """Client pour l'API eBay Browse."""
 
@@ -257,6 +262,9 @@ class EbayClient:
                 self._refresh_token()
                 response = client.get(url, headers=self._get_headers(), params=params)
                 self._track_api_call(1)
+
+            if response.status_code == 429:
+                raise EbayRateLimitError("Rate limit exceeded (429)")
 
             if response.status_code != 200:
                 raise EbayAPIError(f"Search failed: {response.status_code} - {response.text}")

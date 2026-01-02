@@ -16,6 +16,9 @@ from ..config import get_config
 # Fichier cache pour les rate limits eBay
 RATE_LIMITS_CACHE_FILE = os.path.join(os.path.dirname(__file__), "../../data/ebay_rate_limits.json")
 
+# Fichier pour stocker le blocage 429
+RATE_LIMITED_FILE = os.path.join(os.path.dirname(__file__), "../../data/ebay_rate_limited.json")
+
 # Heure de reset de l'API eBay (9h du matin heure locale)
 EBAY_RESET_HOUR = 9
 
@@ -60,7 +63,7 @@ class EbayUsageTracker:
         if not usage:
             usage = ApiUsage(
                 api_name=self.API_NAME,
-                usage_date=today,
+                usage_date=api_date,
                 call_count=0,
                 daily_limit=self.daily_limit
             )
@@ -216,3 +219,94 @@ def refresh_rate_limits_from_ebay() -> Optional[dict]:
     except Exception:
         pass
     return None
+
+
+def set_rate_limited() -> None:
+    """
+    Enregistre qu'on a recu une erreur 429.
+    Le blocage sera actif jusqu'au prochain reset a 9h.
+    """
+    data = {
+        "rate_limited_at": datetime.now().isoformat(),
+        "api_date": str(get_ebay_api_date()),
+    }
+    try:
+        os.makedirs(os.path.dirname(RATE_LIMITED_FILE), exist_ok=True)
+        with open(RATE_LIMITED_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+
+def is_rate_limited() -> bool:
+    """
+    Verifie si on est bloque suite a une erreur 429.
+
+    Retourne True si:
+    - On a recu un 429 sur le jour API actuel (avant 9h)
+    - Et on est toujours avant 9h (pas encore reset)
+
+    Returns:
+        True si bloque, False sinon
+    """
+    try:
+        if not os.path.exists(RATE_LIMITED_FILE):
+            return False
+
+        with open(RATE_LIMITED_FILE, "r") as f:
+            data = json.load(f)
+
+        # Verifier que le blocage est pour le jour API actuel
+        blocked_api_date = data.get("api_date")
+        current_api_date = str(get_ebay_api_date())
+
+        if blocked_api_date != current_api_date:
+            # Le blocage est pour un jour API different, on peut supprimer le fichier
+            try:
+                os.remove(RATE_LIMITED_FILE)
+            except Exception:
+                pass
+            return False
+
+        # Le blocage est pour aujourd'hui, on est encore bloque
+        return True
+
+    except Exception:
+        return False
+
+
+def clear_rate_limited() -> None:
+    """Supprime le blocage 429 (appele apres 9h ou manuellement)."""
+    try:
+        if os.path.exists(RATE_LIMITED_FILE):
+            os.remove(RATE_LIMITED_FILE)
+    except Exception:
+        pass
+
+
+def get_rate_limited_info() -> Optional[dict]:
+    """Retourne les infos de blocage si actif."""
+    if not is_rate_limited():
+        return None
+
+    try:
+        with open(RATE_LIMITED_FILE, "r") as f:
+            data = json.load(f)
+
+        # Calculer le temps restant jusqu'a 9h
+        now = datetime.now()
+        if now.hour < EBAY_RESET_HOUR:
+            reset_time = now.replace(hour=EBAY_RESET_HOUR, minute=0, second=0, microsecond=0)
+        else:
+            # On est apres 9h, le reset est demain (ne devrait pas arriver si is_rate_limited)
+            reset_time = (now + timedelta(days=1)).replace(hour=EBAY_RESET_HOUR, minute=0, second=0, microsecond=0)
+
+        remaining = reset_time - now
+
+        return {
+            "rate_limited_at": data.get("rate_limited_at"),
+            "reset_time": reset_time.strftime("%H:%M"),
+            "remaining_minutes": int(remaining.total_seconds() / 60),
+        }
+    except Exception:
+        return None

@@ -9,7 +9,7 @@ from typing import Optional
 
 import numpy as np
 
-from .client import EbayClient, EbaySearchResult, EbayItem
+from .client import EbayClient, EbaySearchResult, EbayItem, EbayRateLimitError
 from ..models import Card, MarketSnapshot, AnchorSource, Variant
 from ..config import get_config, EbayConfig
 
@@ -255,6 +255,9 @@ class EbayWorker:
 
             result.success = True
 
+        except EbayRateLimitError:
+            # Re-lever l'exception 429 pour arret immediat du batch
+            raise
         except Exception as e:
             result.success = False
             result.error = str(e)

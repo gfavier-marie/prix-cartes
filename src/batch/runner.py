@@ -17,7 +17,8 @@ from ..models import Card, Set, MarketSnapshot, BatchRun, BatchMode, AnchorSourc
 from ..database import get_session, get_db_session
 from ..config import get_config
 from ..ebay import EbayQueryBuilder, EbayWorker
-from ..ebay.usage_tracker import EbayUsageTracker
+from ..ebay.client import EbayRateLimitError
+from ..ebay.usage_tracker import EbayUsageTracker, set_rate_limited, is_rate_limited
 from ..pricing import PriceGuardrails
 
 
@@ -55,6 +56,7 @@ class BatchStats:
     errors: list[tuple[int, str]] = field(default_factory=list)  # (card_id, error)
     skipped_sets: list[str] = field(default_factory=list)  # Sets ignores apres trop d'echecs
     stopped_api_limit: bool = False  # Arrete pour limite API quotidienne atteinte
+    stopped_rate_limit: bool = False  # Arrete pour erreur 429 (rate limit eBay)
     stopped_consecutive_failures: bool = False  # Arrete pour echecs consecutifs sur un set
 
 
@@ -243,6 +245,13 @@ class BatchRunner:
                             console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
                             skipped_sets.add(card.set_id)
                             stats.skipped_sets.append(card.set_id)
+
+                except EbayRateLimitError:
+                    # Erreur 429: activer le blocage et arreter immediatement
+                    console.print("[red]Erreur 429 - Rate limit eBay atteint, arret du batch[/red]")
+                    set_rate_limited()
+                    stats.stopped_rate_limit = True
+                    break
 
                 except Exception as e:
                     stats.failed += 1
@@ -551,6 +560,9 @@ class BatchRunner:
 
         if stats.stopped_api_limit:
             lines.append("*** ARRETE: Limite API quotidienne atteinte ***")
+
+        if stats.stopped_rate_limit:
+            lines.append("*** ARRETE: Erreur 429 - Rate limit eBay (bloque jusqu'a 9h) ***")
 
         lines.extend([
             "",

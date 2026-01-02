@@ -24,6 +24,7 @@ sys.path.insert(0, app_dir)
 
 from src.database import get_session
 from src.models import Settings
+from src.ebay.usage_tracker import is_rate_limited, get_rate_limited_info
 
 
 def get_setting(session, key: str, default: str) -> str:
@@ -38,6 +39,15 @@ def log(message: str):
 
 def main():
     """Point d'entree principal."""
+    # Verifier si on est bloque par une erreur 429
+    if is_rate_limited():
+        info = get_rate_limited_info()
+        if info:
+            log(f"Rate limit 429 actif - bloque jusqu'a {info.get('reset_time', '09:00')}, skip")
+        else:
+            log("Rate limit 429 actif - bloque jusqu'a 09:00, skip")
+        return
+
     with get_session() as session:
         # Verifier si batch active
         enabled = get_setting(session, 'batch_enabled', 'true')
@@ -92,6 +102,8 @@ def main():
 
             if stats.stopped_api_limit:
                 log(f"Arret: limite API atteinte apres {stats.processed} cartes")
+            if stats.stopped_rate_limit:
+                log(f"Arret: erreur 429 (rate limit eBay) - bloque jusqu'a 09:00")
             if stats.skipped_sets:
                 log(f"Sets ignores ({len(stats.skipped_sets)}): {', '.join(stats.skipped_sets)}")
 
