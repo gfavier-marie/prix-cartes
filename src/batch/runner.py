@@ -117,28 +117,32 @@ class BatchRunner:
     def _check_api_limit(self, session: Session) -> bool:
         """Verifie si la limite API quotidienne est atteinte.
 
-        Utilise les vraies valeurs de rate limit eBay (depuis le cache).
-        Fallback sur le compteur interne si le cache n'est pas disponible.
+        Utilise les vraies valeurs de rate limit eBay ET la limite configuree.
+        La limite la plus restrictive est utilisee.
 
         Returns:
             True si la limite est atteinte, False sinon.
         """
-        # Essayer d'utiliser les rate limits eBay (source de verite)
-        ebay_remaining = get_ebay_remaining()
-        if ebay_remaining is not None:
-            return ebay_remaining <= 0
-
-        # Fallback: utiliser le compteur interne
+        # Recuperer la limite configuree dans Settings
         daily_limit_str = Settings.get_value(session, "daily_api_limit", "5000")
         try:
             daily_limit = int(daily_limit_str)
         except ValueError:
             daily_limit = 5000
 
+        # Verifier les rate limits eBay (source de verite pour eBay)
+        ebay_remaining = get_ebay_remaining()
+        if ebay_remaining is not None and ebay_remaining <= 0:
+            return True  # Limite eBay atteinte
+
+        # Verifier la limite configuree (source de verite pour l'utilisateur)
         usage = self.get_api_usage_today()
         today_count = usage.get("today_count", 0)
 
-        return today_count >= daily_limit
+        if today_count >= daily_limit:
+            return True  # Limite configuree atteinte
+
+        return False
 
     def close(self) -> None:
         """Ferme la session de tracking."""

@@ -69,6 +69,9 @@ def main():
 
         log("=== BATCH AUTOMATIQUE ===")
 
+        # Recuperer la limite configuree
+        daily_limit = int(get_setting(session, 'daily_api_limit', '5000'))
+
         # Recuperer les vraies rate limits depuis eBay
         rate_limits = refresh_rate_limits_from_ebay()
 
@@ -76,27 +79,23 @@ def main():
             ebay_remaining = rate_limits.get('remaining', 0)
             ebay_limit = rate_limits.get('limit', 5000)
             ebay_count = rate_limits.get('count', 0)
+            log(f"Rate limits eBay: {ebay_remaining}/{ebay_limit} restants")
 
-            log(f"Rate limits eBay: {ebay_remaining}/{ebay_limit} restants (utilises: {ebay_count})")
-
-            # Verifier si on peut faire au moins 1 requete
             if ebay_remaining <= 0:
-                log(f"Limite API eBay atteinte ({ebay_count}/{ebay_limit}), skip")
+                log(f"Limite eBay atteinte ({ebay_count}/{ebay_limit}), skip")
                 return
-        else:
-            # Fallback sur le compteur interne si eBay ne repond pas
-            log("Impossible de recuperer les rate limits eBay, utilisation du compteur interne")
-            daily_limit = int(get_setting(session, 'daily_api_limit', '5000'))
-            from src.ebay.usage_tracker import get_ebay_usage_summary
-            usage = get_ebay_usage_summary(session)
-            today_count = usage.get('today_count', 0)
-            remaining = daily_limit - today_count
 
-            log(f"Compteur interne: {today_count}/{daily_limit} (restants: {remaining})")
+        # Verifier aussi la limite configuree (compteur interne)
+        from src.ebay.usage_tracker import get_ebay_usage_summary
+        usage = get_ebay_usage_summary(session)
+        today_count = usage.get('today_count', 0)
+        remaining = daily_limit - today_count
 
-            if remaining <= 0:
-                log(f"Limite API atteinte ({today_count}/{daily_limit}), skip")
-                return
+        log(f"Limite configuree: {today_count}/{daily_limit} (restants: {remaining})")
+
+        if remaining <= 0:
+            log(f"Limite configuree atteinte ({today_count}/{daily_limit}), skip")
+            return
 
         # Lancer le batch avec priorisation des cartes anciennes
         from src.batch.runner import BatchRunner
