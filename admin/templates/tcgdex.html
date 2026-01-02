@@ -2,272 +2,187 @@
 {% block title %}TCGdex Sync{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Synchronisation TCGdex</h1>
-    <p>Detecter et importer les nouvelles series depuis l'API TCGdex</p>
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Synchronisation TCGdex</h1>
+    <p class="text-gray-500 dark:text-gray-400 mt-1">Détecter et importer les nouvelles séries depuis l'API TCGdex</p>
 </div>
 
-<!-- Gestion des series et sets -->
-<div class="card" style="margin-bottom: 20px;">
-    <div class="card-header">
-        <h2>Gestion de la visibilite</h2>
-        <div style="display: flex; gap: 10px;">
-            <button class="btn btn-ghost tab-btn active" id="tab-series" onclick="switchTab('series')">
-                Par Serie
+<!-- Gestion des séries et sets -->
+<div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm mb-6 overflow-hidden">
+    <div class="p-4 border-b border-gray-200 dark:border-dark-600 flex flex-wrap items-center justify-between gap-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Gestion de la visibilité</h2>
+        <div class="flex gap-2">
+            <button class="tab-btn px-4 py-2 text-sm font-medium rounded-lg transition-colors bg-blue-600 text-white" id="tab-series" onclick="switchTab('series')">
+                Par Série
             </button>
-            <button class="btn btn-ghost tab-btn" id="tab-sets" onclick="switchTab('sets')">
+            <button class="tab-btn px-4 py-2 text-sm font-medium rounded-lg transition-colors bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-500" id="tab-sets" onclick="switchTab('sets')">
                 Par Set
             </button>
         </div>
     </div>
 
-    <div id="visibility-loading" style="display: none; text-align: center; padding: 20px;">
-        <div class="spinner"></div>
-        <p style="margin-top: 10px; color: var(--text-secondary);">Chargement...</p>
+    <div id="visibility-loading" class="hidden p-8 text-center">
+        <div class="inline-block w-10 h-10 border-3 border-gray-200 dark:border-dark-600 border-t-blue-500 rounded-full animate-spin"></div>
+        <p class="mt-3 text-gray-500 dark:text-gray-400">Chargement...</p>
     </div>
 
-    <!-- Vue par Series -->
-    <div id="series-view" style="display: none;">
-        <div class="stats-grid" style="margin-bottom: 20px;">
-            <div class="stat-box">
-                <div class="stat-value" id="total-series">-</div>
-                <div class="stat-label">Series totales</div>
+    <!-- Vue par Séries -->
+    <div id="series-view" class="hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">
+            <div class="bg-gray-50 dark:bg-dark-600 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white" id="total-series">-</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Séries totales</div>
             </div>
-            <div class="stat-box accent-green">
-                <div class="stat-value" id="visible-series">-</div>
-                <div class="stat-label">Series visibles</div>
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400" id="visible-series">-</div>
+                <div class="text-sm text-green-600 dark:text-green-400">Séries visibles</div>
             </div>
-            <div class="stat-box accent-red">
-                <div class="stat-value" id="hidden-series">-</div>
-                <div class="stat-label">Series masquees</div>
+            <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-red-600 dark:text-red-400" id="hidden-series">-</div>
+                <div class="text-sm text-red-600 dark:text-red-400">Séries masquées</div>
             </div>
         </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Serie ID</th>
-                    <th>Nom</th>
-                    <th>Sets</th>
-                    <th>Cartes</th>
-                    <th>Date debut</th>
-                    <th style="text-align: center;">Visible</th>
-                </tr>
-            </thead>
-            <tbody id="series-tbody">
-            </tbody>
-        </table>
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[700px]">
+                <thead class="bg-gray-50 dark:bg-dark-600">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Série ID</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nom</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sets</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cartes</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date début</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Visible</th>
+                    </tr>
+                </thead>
+                <tbody id="series-tbody" class="divide-y divide-gray-200 dark:divide-dark-600"></tbody>
+            </table>
+        </div>
     </div>
 
     <!-- Vue par Sets -->
-    <div id="sets-view" style="display: none;">
-        <div class="stats-grid" style="margin-bottom: 20px;">
-            <div class="stat-box">
-                <div class="stat-value" id="total-sets">-</div>
-                <div class="stat-label">Sets totaux</div>
+    <div id="sets-view" class="hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4">
+            <div class="bg-gray-50 dark:bg-dark-600 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white" id="total-sets">-</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Sets totaux</div>
             </div>
-            <div class="stat-box accent-green">
-                <div class="stat-value" id="visible-sets">-</div>
-                <div class="stat-label">Sets visibles</div>
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400" id="visible-sets">-</div>
+                <div class="text-sm text-green-600 dark:text-green-400">Sets visibles</div>
             </div>
-            <div class="stat-box accent-red">
-                <div class="stat-value" id="hidden-sets">-</div>
-                <div class="stat-label">Sets masques</div>
+            <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-red-600 dark:text-red-400" id="hidden-sets">-</div>
+                <div class="text-sm text-red-600 dark:text-red-400">Sets masqués</div>
             </div>
         </div>
 
-        <div style="margin-bottom: 16px;">
-            <input type="text" id="sets-filter" placeholder="Filtrer par nom ou serie..."
-                   onkeyup="filterSets()" style="width: 300px;">
+        <div class="px-4 pb-4">
+            <input type="text" id="sets-filter" placeholder="Filtrer par nom ou série..."
+                   onkeyup="filterSets()"
+                   class="w-full max-w-xs px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
         </div>
 
-        <table>
-            <thead>
-                <tr>
-                    <th>Set ID</th>
-                    <th>Nom</th>
-                    <th>Serie</th>
-                    <th>Cartes</th>
-                    <th>Date</th>
-                    <th style="text-align: center;">Visible</th>
-                </tr>
-            </thead>
-            <tbody id="visibility-sets-tbody">
-            </tbody>
-        </table>
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[700px]">
+                <thead class="bg-gray-50 dark:bg-dark-600">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Set ID</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nom</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Série</th>
+                        <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cartes</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Visible</th>
+                    </tr>
+                </thead>
+                <tbody id="visibility-sets-tbody" class="divide-y divide-gray-200 dark:divide-dark-600"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header">
-        <h2>Scanner les nouveaux sets</h2>
-        <button class="btn btn-primary" id="check-btn" onclick="checkNewSets()">
-            Verifier les nouveaux sets
+<!-- Scanner nouveaux sets -->
+<div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-gray-200 dark:border-dark-600 flex flex-wrap items-center justify-between gap-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Scanner les nouveaux sets</h2>
+        <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors" id="check-btn" onclick="checkNewSets()">
+            Vérifier les nouveaux sets
         </button>
     </div>
 
-    <div id="scan-result" style="display: none;">
-        <div class="stats-grid" style="margin-bottom: 20px;">
-            <div class="stat-box">
-                <div class="stat-value" id="total-tcgdex">-</div>
-                <div class="stat-label">Sets sur TCGdex</div>
+    <div id="scan-result" class="hidden">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4">
+            <div class="bg-gray-50 dark:bg-dark-600 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white" id="total-tcgdex">-</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Sets sur TCGdex</div>
             </div>
-            <div class="stat-box">
-                <div class="stat-value" id="existing-sets">-</div>
-                <div class="stat-label">Sets en base</div>
+            <div class="bg-gray-50 dark:bg-dark-600 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-gray-900 dark:text-white" id="existing-sets">-</div>
+                <div class="text-sm text-gray-500 dark:text-gray-400">Sets en base</div>
             </div>
-            <div class="stat-box accent-blue">
-                <div class="stat-value" id="imported-sets">-</div>
-                <div class="stat-label">Sets importes (pricing)</div>
+            <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-blue-600 dark:text-blue-400" id="imported-sets">-</div>
+                <div class="text-sm text-blue-600 dark:text-blue-400">Sets importés</div>
             </div>
-            <div class="stat-box accent-green">
-                <div class="stat-value" id="new-sets-count">-</div>
-                <div class="stat-label">Nouveaux sets</div>
+            <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400" id="new-sets-count">-</div>
+                <div class="text-sm text-green-600 dark:text-green-400">Nouveaux sets</div>
             </div>
         </div>
 
-        <div id="new-sets-list" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h2 style="margin: 0;">Nouveaux sets detectes</h2>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-ghost btn-sm" onclick="toggleSelectAll()">
-                        <span id="select-all-text">Tout selectionner</span>
+        <div id="new-sets-list" class="hidden">
+            <div class="px-4 pb-4 flex flex-wrap items-center justify-between gap-4">
+                <h3 class="text-base font-medium text-gray-900 dark:text-white">Nouveaux sets détectés</h3>
+                <div class="flex gap-2">
+                    <button class="px-3 py-1.5 text-sm border border-gray-300 dark:border-dark-500 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors" onclick="toggleSelectAll()">
+                        <span id="select-all-text">Tout sélectionner</span>
                     </button>
-                    <button class="btn btn-success" id="import-btn" onclick="importSelected()" disabled>
-                        Importer les sets selectionnes
+                    <button class="px-4 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50" id="import-btn" onclick="importSelected()" disabled>
+                        Importer les sets sélectionnés
                     </button>
                 </div>
             </div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width: 40px;"></th>
-                        <th>Set ID</th>
-                        <th>Nom</th>
-                        <th>Cartes</th>
-                        <th>Date de sortie</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody id="sets-tbody">
-                </tbody>
-            </table>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[600px]">
+                    <thead class="bg-gray-50 dark:bg-dark-600">
+                        <tr>
+                            <th class="px-4 py-3 w-10"></th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Set ID</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nom</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Cartes</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date de sortie</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sets-tbody" class="divide-y divide-gray-200 dark:divide-dark-600"></tbody>
+                </table>
+            </div>
         </div>
 
-        <div id="no-new-sets" class="empty-state" style="display: none;">
-            <p>Aucun nouveau set detecte. La base de donnees est a jour.</p>
+        <div id="no-new-sets" class="hidden p-8 text-center text-gray-500 dark:text-gray-400">
+            <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <p>Aucun nouveau set détecté. La base de données est à jour.</p>
         </div>
     </div>
 
-    <div id="loading" style="display: none; text-align: center; padding: 40px;">
-        <div class="spinner"></div>
-        <p id="loading-text" style="margin-top: 16px; color: var(--text-secondary);">Analyse en cours...</p>
+    <div id="loading" class="hidden p-8 text-center">
+        <div class="inline-block w-10 h-10 border-3 border-gray-200 dark:border-dark-600 border-t-blue-500 rounded-full animate-spin"></div>
+        <p id="loading-text" class="mt-3 text-gray-500 dark:text-gray-400">Analyse en cours...</p>
     </div>
 </div>
 
-<div id="import-results" class="card" style="display: none;">
-    <div class="card-header">
-        <h2>Resultats de l'import</h2>
+<!-- Résultats d'import -->
+<div id="import-results" class="hidden bg-white dark:bg-dark-700 rounded-lg shadow-sm mt-6 overflow-hidden">
+    <div class="p-4 border-b border-gray-200 dark:border-dark-600">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Résultats de l'import</h2>
     </div>
-    <div id="import-results-content"></div>
+    <div id="import-results-content" class="p-4"></div>
 </div>
 
 <style>
-    .spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid var(--border-color);
-        border-top-color: var(--accent-blue);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-        margin: 0 auto;
-    }
-
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-
-    .set-row input[type="checkbox"] {
-        width: 18px;
-        height: 18px;
-        cursor: pointer;
-    }
-
-    .set-row.importing {
-        opacity: 0.6;
-    }
-
-    .set-row .status-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    .status-badge.pending {
-        background: var(--bg-secondary);
-        color: var(--text-secondary);
-    }
-
-    .status-badge.importing {
-        background: rgba(59, 130, 246, 0.15);
-        color: var(--accent-blue);
-    }
-
-    .status-badge.done {
-        background: rgba(34, 197, 94, 0.15);
-        color: var(--accent-green);
-    }
-
-    .status-badge.error {
-        background: rgba(239, 68, 68, 0.15);
-        color: var(--accent-red);
-    }
-
-    .progress-bar {
-        width: 100%;
-        height: 8px;
-        background: var(--bg-secondary);
-        border-radius: 4px;
-        overflow: hidden;
-        margin-bottom: 20px;
-    }
-
-    .progress-bar-fill {
-        height: 100%;
-        background: var(--accent-blue);
-        border-radius: 4px;
-        transition: width 0.3s ease;
-    }
-
-    .import-summary {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 16px;
-        padding: 20px;
-        background: var(--bg-secondary);
-        border-radius: var(--radius-sm);
-    }
-
-    .import-summary-item {
-        text-align: center;
-    }
-
-    .import-summary-value {
-        font-size: 24px;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-
-    .import-summary-label {
-        font-size: 13px;
-        color: var(--text-secondary);
-    }
-
     /* Toggle switch */
     .toggle-switch {
         position: relative;
@@ -275,13 +190,11 @@
         width: 48px;
         height: 26px;
     }
-
     .toggle-switch input {
         opacity: 0;
         width: 0;
         height: 0;
     }
-
     .toggle-slider {
         position: absolute;
         cursor: pointer;
@@ -289,11 +202,13 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background-color: var(--border-color);
+        background-color: #d1d5db;
         transition: 0.3s;
         border-radius: 26px;
     }
-
+    .dark .toggle-slider {
+        background-color: #4b5563;
+    }
     .toggle-slider:before {
         position: absolute;
         content: "";
@@ -305,89 +220,19 @@
         transition: 0.3s;
         border-radius: 50%;
     }
-
     .toggle-switch input:checked + .toggle-slider {
-        background-color: var(--accent-green);
+        background-color: #22c55e;
     }
-
     .toggle-switch input:checked + .toggle-slider:before {
         transform: translateX(22px);
     }
-
     .toggle-switch.loading .toggle-slider {
         opacity: 0.6;
         pointer-events: none;
     }
-
-    .serie-row.hidden-serie {
-        background-color: rgba(239, 68, 68, 0.05);
-    }
-
-    .serie-row.hidden-serie td {
-        opacity: 0.6;
-    }
-
-    .serie-row.hidden-serie td:last-child {
-        opacity: 1;
-    }
-
-    /* Tabs */
-    .tab-btn {
-        padding: 8px 16px;
-        border: 1px solid var(--border-color);
-        background: var(--bg-secondary);
-        color: var(--text-secondary);
-    }
-
-    .tab-btn.active {
-        background: var(--accent-blue);
-        color: white;
-        border-color: var(--accent-blue);
-    }
-
-    .tab-btn:hover:not(.active) {
-        background: var(--bg-primary);
-    }
-
-    /* Set rows */
-    .set-row.hidden-set {
-        background-color: rgba(239, 68, 68, 0.05);
-    }
-
-    .set-row.hidden-set td {
-        opacity: 0.6;
-    }
-
-    .set-row.hidden-set td:last-child {
-        opacity: 1;
-    }
-
-    .set-row.hidden-by-serie {
-        background-color: rgba(239, 68, 68, 0.1);
-    }
-
-    .hidden-badge {
-        display: inline-block;
-        font-size: 10px;
-        padding: 2px 6px;
-        border-radius: 10px;
-        background: rgba(239, 68, 68, 0.2);
-        color: var(--accent-red);
-        margin-left: 8px;
-    }
-
-    /* Filter input */
-    #sets-filter {
-        padding: 8px 12px;
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-sm);
-        background: var(--bg-secondary);
-        color: var(--text-primary);
-    }
-
-    #sets-filter:focus {
-        outline: none;
-        border-color: var(--accent-blue);
+    /* Spinner */
+    .border-3 {
+        border-width: 3px;
     }
 </style>
 
@@ -399,91 +244,67 @@
     let currentTab = 'series';
     let dataLoaded = { series: false, sets: false };
 
-    // ===============================
-    // Gestion des onglets
-    // ===============================
-
     function switchTab(tab) {
         currentTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('bg-blue-600', 'text-white');
+            btn.classList.add('bg-gray-100', 'dark:bg-dark-600', 'text-gray-600', 'dark:text-gray-400');
+        });
+        const activeBtn = document.getElementById(`tab-${tab}`);
+        activeBtn.classList.remove('bg-gray-100', 'dark:bg-dark-600', 'text-gray-600', 'dark:text-gray-400');
+        activeBtn.classList.add('bg-blue-600', 'text-white');
 
-        // Update tab buttons
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.getElementById('series-view').classList.toggle('hidden', tab !== 'series');
+        document.getElementById('sets-view').classList.toggle('hidden', tab !== 'sets');
 
-        // Update views
-        document.getElementById('series-view').style.display = tab === 'series' ? 'block' : 'none';
-        document.getElementById('sets-view').style.display = tab === 'sets' ? 'block' : 'none';
-
-        // Load data if not already loaded
-        if (tab === 'series' && !dataLoaded.series) {
-            loadSeries();
-        } else if (tab === 'sets' && !dataLoaded.sets) {
-            loadSets();
-        }
+        if (tab === 'series' && !dataLoaded.series) loadSeries();
+        else if (tab === 'sets' && !dataLoaded.sets) loadSets();
     }
 
-    // Auto-load series on page load
     document.addEventListener('DOMContentLoaded', function() {
         loadSeries();
     });
 
-    // ===============================
-    // Gestion des series
-    // ===============================
-
     function loadSeries() {
         const loading = document.getElementById('visibility-loading');
         const seriesView = document.getElementById('series-view');
-
-        loading.style.display = 'block';
-        seriesView.style.display = 'none';
+        loading.classList.remove('hidden');
+        seriesView.classList.add('hidden');
 
         fetch('/api/tcgdex/series')
             .then(r => r.json())
             .then(data => {
-                loading.style.display = 'none';
-
-                if (!data.success) {
-                    alert('Erreur: ' + data.error);
-                    return;
-                }
+                loading.classList.add('hidden');
+                if (!data.success) { showToast('Erreur: ' + data.error, 'error'); return; }
 
                 seriesData = data.series;
                 dataLoaded.series = true;
                 const visible = seriesData.filter(s => s.is_visible).length;
-                const hidden = seriesData.length - visible;
-
                 document.getElementById('total-series').textContent = seriesData.length;
                 document.getElementById('visible-series').textContent = visible;
-                document.getElementById('hidden-series').textContent = hidden;
-
+                document.getElementById('hidden-series').textContent = seriesData.length - visible;
                 renderSeriesList();
-                seriesView.style.display = 'block';
+                seriesView.classList.remove('hidden');
             })
-            .catch(err => {
-                loading.style.display = 'none';
-                alert('Erreur: ' + err.message);
-            });
+            .catch(err => { loading.classList.add('hidden'); showToast('Erreur: ' + err.message, 'error'); });
     }
 
     function renderSeriesList() {
         const tbody = document.getElementById('series-tbody');
         tbody.innerHTML = '';
-
         seriesData.forEach(serie => {
             const tr = document.createElement('tr');
-            tr.className = 'serie-row' + (serie.is_visible ? '' : ' hidden-serie');
+            tr.className = `hover:bg-gray-50 dark:hover:bg-dark-600/50 ${serie.is_visible ? '' : 'opacity-60'}`;
             tr.id = `serie-row-${serie.serie_id}`;
             tr.innerHTML = `
-                <td class="mono">${serie.serie_id}</td>
-                <td>${serie.serie_name}</td>
-                <td>${serie.set_count}</td>
-                <td>${serie.card_count}</td>
-                <td>${serie.first_date || '-'}</td>
-                <td style="text-align: center;">
+                <td class="px-4 py-3 font-mono text-sm text-gray-900 dark:text-white">${serie.serie_id}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">${serie.serie_name}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 text-right">${serie.set_count}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 text-right">${serie.card_count}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">${serie.first_date || '-'}</td>
+                <td class="px-4 py-3 text-center">
                     <label class="toggle-switch" id="toggle-${serie.serie_id}">
-                        <input type="checkbox" ${serie.is_visible ? 'checked' : ''}
-                               onchange="toggleSerie('${serie.serie_id}')">
+                        <input type="checkbox" ${serie.is_visible ? 'checked' : ''} onchange="toggleSerie('${serie.serie_id}')">
                         <span class="toggle-slider"></span>
                     </label>
                 </td>
@@ -496,119 +317,74 @@
         const toggle = document.getElementById(`toggle-${serieId}`);
         const row = document.getElementById(`serie-row-${serieId}`);
         const checkbox = toggle.querySelector('input');
-
         toggle.classList.add('loading');
 
         fetch(`/api/tcgdex/series/${serieId}/toggle`, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
                 toggle.classList.remove('loading');
-
-                if (!data.success) {
-                    // Revert checkbox
-                    checkbox.checked = !checkbox.checked;
-                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-                    return;
-                }
-
-                // Update row styling
-                if (data.is_visible) {
-                    row.classList.remove('hidden-serie');
-                } else {
-                    row.classList.add('hidden-serie');
-                }
-
-                // Update local data
+                if (!data.success) { checkbox.checked = !checkbox.checked; showToast('Erreur: ' + (data.error || 'Erreur inconnue'), 'error'); return; }
+                row.classList.toggle('opacity-60', !data.is_visible);
                 const serie = seriesData.find(s => s.serie_id === serieId);
                 if (serie) serie.is_visible = data.is_visible;
-
-                // Update stats
                 const visible = seriesData.filter(s => s.is_visible).length;
                 document.getElementById('visible-series').textContent = visible;
                 document.getElementById('hidden-series').textContent = seriesData.length - visible;
             })
-            .catch(err => {
-                toggle.classList.remove('loading');
-                checkbox.checked = !checkbox.checked;
-                alert('Erreur: ' + err.message);
-            });
+            .catch(err => { toggle.classList.remove('loading'); checkbox.checked = !checkbox.checked; showToast('Erreur: ' + err.message, 'error'); });
     }
-
-    // ===============================
-    // Gestion des sets (visibilite)
-    // ===============================
 
     function loadSets() {
         const loading = document.getElementById('visibility-loading');
         const setsView = document.getElementById('sets-view');
-
-        loading.style.display = 'block';
-        setsView.style.display = 'none';
+        loading.classList.remove('hidden');
+        setsView.classList.add('hidden');
 
         fetch('/api/tcgdex/sets')
             .then(r => r.json())
             .then(data => {
-                loading.style.display = 'none';
-
-                if (!data.success) {
-                    alert('Erreur: ' + data.error);
-                    return;
-                }
+                loading.classList.add('hidden');
+                if (!data.success) { showToast('Erreur: ' + data.error, 'error'); return; }
 
                 setsData = data.sets;
                 dataLoaded.sets = true;
                 const visible = setsData.filter(s => s.is_visible).length;
-                const hidden = setsData.length - visible;
-
                 document.getElementById('total-sets').textContent = setsData.length;
                 document.getElementById('visible-sets').textContent = visible;
-                document.getElementById('hidden-sets').textContent = hidden;
-
+                document.getElementById('hidden-sets').textContent = setsData.length - visible;
                 renderVisibilitySets();
-                setsView.style.display = 'block';
+                setsView.classList.remove('hidden');
             })
-            .catch(err => {
-                loading.style.display = 'none';
-                alert('Erreur: ' + err.message);
-            });
+            .catch(err => { loading.classList.add('hidden'); showToast('Erreur: ' + err.message, 'error'); });
     }
 
     function renderVisibilitySets(filter = '') {
         const tbody = document.getElementById('visibility-sets-tbody');
         tbody.innerHTML = '';
-
         const filterLower = filter.toLowerCase();
-        const filteredSets = setsData.filter(set => {
-            if (!filter) return true;
-            return set.name.toLowerCase().includes(filterLower) ||
-                   set.set_id.toLowerCase().includes(filterLower) ||
-                   (set.serie_name && set.serie_name.toLowerCase().includes(filterLower));
-        });
+        const filteredSets = setsData.filter(set => !filter || set.name.toLowerCase().includes(filterLower) || set.set_id.toLowerCase().includes(filterLower) || (set.serie_name && set.serie_name.toLowerCase().includes(filterLower)));
 
         filteredSets.forEach(set => {
             const tr = document.createElement('tr');
-            let rowClass = 'set-row';
-            let hiddenBadge = '';
-
+            let rowClass = 'hover:bg-gray-50 dark:hover:bg-dark-600/50';
+            let badge = '';
             if (set.hidden_by_serie) {
-                rowClass += ' hidden-by-serie';
-                hiddenBadge = '<span class="hidden-badge">serie masquee</span>';
+                rowClass += ' opacity-40';
+                badge = '<span class="ml-2 px-1.5 py-0.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded">série masquée</span>';
             } else if (!set.is_visible) {
-                rowClass += ' hidden-set';
+                rowClass += ' opacity-60';
             }
-
             tr.className = rowClass;
             tr.id = `visibility-set-row-${set.set_id}`;
             tr.innerHTML = `
-                <td class="mono">${set.set_id}</td>
-                <td>${set.name}${hiddenBadge}</td>
-                <td>${set.serie_name || '-'}</td>
-                <td>${set.card_count || '-'}</td>
-                <td>${set.release_date || '-'}</td>
-                <td style="text-align: center;">
+                <td class="px-4 py-3 font-mono text-sm text-gray-900 dark:text-white">${set.set_id}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">${set.name}${badge}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">${set.serie_name || '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 text-right">${set.card_count || '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">${set.release_date || '-'}</td>
+                <td class="px-4 py-3 text-center">
                     <label class="toggle-switch${set.hidden_by_serie ? ' loading' : ''}" id="toggle-set-${set.set_id}">
-                        <input type="checkbox" ${set.is_visible ? 'checked' : ''} ${set.hidden_by_serie ? 'disabled' : ''}
-                               onchange="toggleSet('${set.set_id}')">
+                        <input type="checkbox" ${set.is_visible ? 'checked' : ''} ${set.hidden_by_serie ? 'disabled' : ''} onchange="toggleSet('${set.set_id}')">
                         <span class="toggle-slider"></span>
                     </label>
                 </td>
@@ -621,51 +397,26 @@
         const toggle = document.getElementById(`toggle-set-${setId}`);
         const row = document.getElementById(`visibility-set-row-${setId}`);
         const checkbox = toggle.querySelector('input');
-
         toggle.classList.add('loading');
 
         fetch(`/api/tcgdex/sets/${setId}/toggle`, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
                 toggle.classList.remove('loading');
-
-                if (!data.success) {
-                    checkbox.checked = !checkbox.checked;
-                    alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-                    return;
-                }
-
-                // Update row styling
-                if (data.is_visible) {
-                    row.classList.remove('hidden-set');
-                } else {
-                    row.classList.add('hidden-set');
-                }
-
-                // Update local data
+                if (!data.success) { checkbox.checked = !checkbox.checked; showToast('Erreur: ' + (data.error || 'Erreur inconnue'), 'error'); return; }
+                row.classList.toggle('opacity-60', !data.is_visible);
                 const set = setsData.find(s => s.set_id === setId);
                 if (set) set.is_visible = data.is_visible;
-
-                // Update stats
                 const visible = setsData.filter(s => s.is_visible).length;
                 document.getElementById('visible-sets').textContent = visible;
                 document.getElementById('hidden-sets').textContent = setsData.length - visible;
             })
-            .catch(err => {
-                toggle.classList.remove('loading');
-                checkbox.checked = !checkbox.checked;
-                alert('Erreur: ' + err.message);
-            });
+            .catch(err => { toggle.classList.remove('loading'); checkbox.checked = !checkbox.checked; showToast('Erreur: ' + err.message, 'error'); });
     }
 
     function filterSets() {
-        const filter = document.getElementById('sets-filter').value;
-        renderVisibilitySets(filter);
+        renderVisibilitySets(document.getElementById('sets-filter').value);
     }
-
-    // ===============================
-    // Gestion des nouveaux sets
-    // ===============================
 
     function checkNewSets() {
         const btn = document.getElementById('check-btn');
@@ -674,21 +425,18 @@
 
         btn.disabled = true;
         btn.textContent = 'Analyse en cours...';
-        loading.style.display = 'block';
-        result.style.display = 'none';
+        loading.classList.remove('hidden');
+        result.classList.add('hidden');
 
         fetch('/api/tcgdex/check-new-sets')
             .then(r => r.json())
             .then(data => {
-                loading.style.display = 'none';
-                result.style.display = 'block';
+                loading.classList.add('hidden');
+                result.classList.remove('hidden');
                 btn.disabled = false;
-                btn.textContent = 'Verifier les nouveaux sets';
+                btn.textContent = 'Vérifier les nouveaux sets';
 
-                if (!data.success) {
-                    alert('Erreur: ' + data.error);
-                    return;
-                }
+                if (!data.success) { showToast('Erreur: ' + data.error, 'error'); return; }
 
                 document.getElementById('total-tcgdex').textContent = data.total_tcgdex_sets;
                 document.getElementById('existing-sets').textContent = data.existing_sets;
@@ -696,43 +444,35 @@
                 document.getElementById('new-sets-count').textContent = data.new_count;
 
                 newSets = data.new_sets;
-
                 if (data.new_count > 0) {
-                    document.getElementById('new-sets-list').style.display = 'block';
-                    document.getElementById('no-new-sets').style.display = 'none';
+                    document.getElementById('new-sets-list').classList.remove('hidden');
+                    document.getElementById('no-new-sets').classList.add('hidden');
                     renderSetsList();
                 } else {
-                    document.getElementById('new-sets-list').style.display = 'none';
-                    document.getElementById('no-new-sets').style.display = 'block';
+                    document.getElementById('new-sets-list').classList.add('hidden');
+                    document.getElementById('no-new-sets').classList.remove('hidden');
                 }
             })
-            .catch(err => {
-                loading.style.display = 'none';
-                btn.disabled = false;
-                btn.textContent = 'Verifier les nouveaux sets';
-                alert('Erreur: ' + err.message);
-            });
+            .catch(err => { loading.classList.add('hidden'); btn.disabled = false; btn.textContent = 'Vérifier les nouveaux sets'; showToast('Erreur: ' + err.message, 'error'); });
     }
 
     function renderSetsList() {
         const tbody = document.getElementById('sets-tbody');
         tbody.innerHTML = '';
-
-        newSets.forEach((set, idx) => {
+        newSets.forEach(set => {
             const tr = document.createElement('tr');
-            tr.className = 'set-row';
+            tr.className = 'set-row hover:bg-gray-50 dark:hover:bg-dark-600/50';
             tr.id = `set-row-${set.id}`;
             tr.innerHTML = `
-                <td><input type="checkbox" id="cb-${set.id}" onchange="updateImportBtn()"></td>
-                <td class="mono">${set.id}</td>
-                <td>${set.name}</td>
-                <td>${set.card_count || '-'}</td>
-                <td>${set.release_date || '-'}</td>
-                <td><span class="status-badge pending" id="status-${set.id}">En attente</span></td>
+                <td class="px-4 py-3"><input type="checkbox" id="cb-${set.id}" onchange="updateImportBtn()" class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"></td>
+                <td class="px-4 py-3 font-mono text-sm text-gray-900 dark:text-white">${set.id}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">${set.name}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 text-right">${set.card_count || '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">${set.release_date || '-'}</td>
+                <td class="px-4 py-3"><span class="status-badge px-2 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400" id="status-${set.id}">En attente</span></td>
             `;
             tbody.appendChild(tr);
         });
-
         updateImportBtn();
     }
 
@@ -740,11 +480,9 @@
         allSelected = !allSelected;
         newSets.forEach(set => {
             const cb = document.getElementById(`cb-${set.id}`);
-            if (cb && !cb.disabled) {
-                cb.checked = allSelected;
-            }
+            if (cb && !cb.disabled) cb.checked = allSelected;
         });
-        document.getElementById('select-all-text').textContent = allSelected ? 'Tout deselectionner' : 'Tout selectionner';
+        document.getElementById('select-all-text').textContent = allSelected ? 'Tout désélectionner' : 'Tout sélectionner';
         updateImportBtn();
     }
 
@@ -752,18 +490,11 @@
         const selected = getSelectedSetIds();
         const btn = document.getElementById('import-btn');
         btn.disabled = selected.length === 0;
-        btn.textContent = selected.length > 0
-            ? `Importer ${selected.length} set${selected.length > 1 ? 's' : ''}`
-            : 'Importer les sets selectionnes';
+        btn.textContent = selected.length > 0 ? `Importer ${selected.length} set${selected.length > 1 ? 's' : ''}` : 'Importer les sets sélectionnés';
     }
 
     function getSelectedSetIds() {
-        return newSets
-            .filter(set => {
-                const cb = document.getElementById(`cb-${set.id}`);
-                return cb && cb.checked;
-            })
-            .map(set => set.id);
+        return newSets.filter(set => { const cb = document.getElementById(`cb-${set.id}`); return cb && cb.checked; }).map(set => set.id);
     }
 
     async function importSelected() {
@@ -773,93 +504,79 @@
         const btn = document.getElementById('import-btn');
         btn.disabled = true;
         btn.textContent = 'Import en cours...';
-
-        // Desactiver toutes les checkboxes
-        newSets.forEach(set => {
-            const cb = document.getElementById(`cb-${set.id}`);
-            if (cb) cb.disabled = true;
-        });
+        newSets.forEach(set => { const cb = document.getElementById(`cb-${set.id}`); if (cb) cb.disabled = true; });
 
         const resultsCard = document.getElementById('import-results');
         const resultsContent = document.getElementById('import-results-content');
-        resultsCard.style.display = 'block';
+        resultsCard.classList.remove('hidden');
         resultsContent.innerHTML = `
-            <div class="progress-bar">
-                <div class="progress-bar-fill" id="progress-fill" style="width: 0%"></div>
+            <div class="w-full bg-gray-200 dark:bg-dark-600 rounded-full h-2 mb-4">
+                <div class="h-2 rounded-full bg-blue-500 transition-all" id="progress-fill" style="width: 0%"></div>
             </div>
-            <p id="progress-text" style="text-align: center; color: var(--text-secondary);">
-                Import en cours: 0/${setIds.length}
-            </p>
+            <p id="progress-text" class="text-center text-gray-500 dark:text-gray-400">Import en cours: 0/${setIds.length}</p>
         `;
 
-        let totalCreated = 0;
-        let totalUpdated = 0;
-        let errors = [];
+        let totalCreated = 0, totalUpdated = 0, errors = [];
 
         for (let i = 0; i < setIds.length; i++) {
             const setId = setIds[i];
             const statusBadge = document.getElementById(`status-${setId}`);
             const row = document.getElementById(`set-row-${setId}`);
 
-            statusBadge.className = 'status-badge importing';
+            statusBadge.className = 'status-badge px-2 py-1 text-xs font-medium rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400';
             statusBadge.textContent = 'Import...';
-            row.classList.add('importing');
+            row.classList.add('opacity-60');
 
             try {
                 const response = await fetch(`/api/tcgdex/import-set/${setId}`, { method: 'POST' });
                 const data = await response.json();
 
                 if (data.success) {
-                    statusBadge.className = 'status-badge done';
+                    statusBadge.className = 'status-badge px-2 py-1 text-xs font-medium rounded bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400';
                     statusBadge.textContent = `${data.cards_created} cartes`;
                     totalCreated += data.cards_created;
                     totalUpdated += data.cards_updated;
                 } else {
-                    statusBadge.className = 'status-badge error';
+                    statusBadge.className = 'status-badge px-2 py-1 text-xs font-medium rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400';
                     statusBadge.textContent = 'Erreur';
                     errors.push({ setId, error: data.error });
                 }
             } catch (err) {
-                statusBadge.className = 'status-badge error';
+                statusBadge.className = 'status-badge px-2 py-1 text-xs font-medium rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400';
                 statusBadge.textContent = 'Erreur';
                 errors.push({ setId, error: err.message });
             }
 
-            row.classList.remove('importing');
-
-            // Mettre a jour la progression
-            const progress = ((i + 1) / setIds.length) * 100;
-            document.getElementById('progress-fill').style.width = `${progress}%`;
+            row.classList.remove('opacity-60');
+            document.getElementById('progress-fill').style.width = `${((i + 1) / setIds.length) * 100}%`;
             document.getElementById('progress-text').textContent = `Import en cours: ${i + 1}/${setIds.length}`;
         }
 
-        // Afficher le resume
         resultsContent.innerHTML = `
-            <div class="import-summary">
-                <div class="import-summary-item">
-                    <div class="import-summary-value" style="color: var(--accent-green);">${totalCreated}</div>
-                    <div class="import-summary-label">Cartes creees</div>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-green-600 dark:text-green-400">${totalCreated}</div>
+                    <div class="text-sm text-green-600 dark:text-green-400">Cartes créées</div>
                 </div>
-                <div class="import-summary-item">
-                    <div class="import-summary-value" style="color: var(--accent-blue);">${totalUpdated}</div>
-                    <div class="import-summary-label">Cartes mises a jour</div>
+                <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">${totalUpdated}</div>
+                    <div class="text-sm text-blue-600 dark:text-blue-400">Cartes mises à jour</div>
                 </div>
-                <div class="import-summary-item">
-                    <div class="import-summary-value" style="color: ${errors.length > 0 ? 'var(--accent-red)' : 'var(--text-secondary)'};">${errors.length}</div>
-                    <div class="import-summary-label">Erreurs</div>
+                <div class="bg-${errors.length > 0 ? 'red' : 'gray'}-50 dark:bg-${errors.length > 0 ? 'red' : 'gray'}-900/20 rounded-lg p-4 text-center">
+                    <div class="text-2xl font-bold text-${errors.length > 0 ? 'red' : 'gray'}-600 dark:text-${errors.length > 0 ? 'red' : 'gray'}-400">${errors.length}</div>
+                    <div class="text-sm text-${errors.length > 0 ? 'red' : 'gray'}-600 dark:text-${errors.length > 0 ? 'red' : 'gray'}-400">Erreurs</div>
                 </div>
             </div>
             ${errors.length > 0 ? `
-                <div style="margin-top: 20px;">
-                    <h3 style="color: var(--accent-red); margin-bottom: 10px;">Erreurs</h3>
-                    <ul style="color: var(--text-secondary); font-size: 14px;">
+                <div class="mt-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                    <h4 class="font-medium text-red-600 dark:text-red-400 mb-2">Erreurs</h4>
+                    <ul class="text-sm text-red-600 dark:text-red-400 space-y-1">
                         ${errors.map(e => `<li><strong>${e.setId}</strong>: ${e.error}</li>`).join('')}
                     </ul>
                 </div>
             ` : ''}
         `;
-
-        btn.textContent = 'Import termine';
+        btn.textContent = 'Import terminé';
     }
 </script>
 {% endblock %}

@@ -3,106 +3,235 @@
 {% block title %}{{ card.effective_name }}{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>{{ card.effective_name }}{% if card.name_override %} <span class="badge badge-low" style="font-size: 12px; vertical-align: middle;">Override</span>{% endif %}</h1>
-    <p class="mono">{{ card.tcgdex_id }}</p>
+<!-- Page Header -->
+<div class="mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3 flex-wrap">
+                {{ card.effective_name }}
+                {% if card.name_override %}
+                <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">Override</span>
+                {% endif %}
+            </h1>
+            <p class="mt-1 font-mono text-sm text-gray-500 dark:text-gray-400">{{ card.tcgdex_id }}</p>
+        </div>
+        <a href="{{ back_url | default(url_for('cards_list')) }}" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            Retour
+        </a>
+    </div>
 </div>
 
-<div style="display: flex; gap: 12px; margin-bottom: 30px;">
-    <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning">Éditer la requête</a>
-    <form method="POST" action="{{ url_for('card_reprocess', card_id=card.id) }}{% if back_params %}?{{ back_params }}{% endif %}" style="display: inline;">
-        <button type="submit" class="btn btn-primary">Collecter les données eBay</button>
+<!-- Action Buttons -->
+<div class="flex flex-wrap gap-3 mb-6">
+    <a href="{{ url_for('card_edit', card_id=card.id) }}" class="inline-flex items-center gap-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        Editer la requete
+    </a>
+    <form method="POST" action="{{ url_for('card_reprocess', card_id=card.id) }}{% if back_params %}?{{ back_params }}{% endif %}" class="inline">
+        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Collecter eBay
+        </button>
     </form>
     {% if card.effective_ebay_query %}
-    <a href="https://www.ebay.fr/sch/i.html?_nkw={{ card.effective_ebay_query | urlencode }}&_sacat=183454" target="_blank" rel="noopener" class="btn btn-ok" style="background: #0064d2; color: white;">
-        Rechercher sur eBay
+    <a href="https://www.ebay.fr/sch/i.html?_nkw={{ card.effective_ebay_query | urlencode }}&_sacat=183454" target="_blank" rel="noopener" class="inline-flex items-center gap-2 px-4 py-2 bg-[#0064d2] hover:bg-[#0054b8] text-white text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        eBay
     </a>
     {% endif %}
-    <a href="{{ back_url | default(url_for('cards_list')) }}" class="btn btn-ghost">Retour</a>
 </div>
 
-<div class="card">
-    <div style="display: flex; gap: 24px; align-items: flex-start;">
-        <div style="flex-shrink: 0;">
-            <img src="{{ card.image_url }}" alt="{{ card.name }}" style="width: 180px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" loading="lazy" onerror="this.style.display='none'">
+<!-- Card Info -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row gap-6">
+        <div class="shrink-0">
+            <img src="{{ card.image_url }}" alt="{{ card.name }}" class="w-36 sm:w-44 rounded-lg shadow-lg" loading="lazy" onerror="this.style.display='none'">
         </div>
-        <div style="flex: 1;">
-            <h2 style="margin-top: 0;">Informations</h2>
-            <table class="info-table">
-                <tr><td>Set</td><td>{{ card.effective_set_name }}{% if card.set_name_override %} <span class="badge badge-low">Override</span>{% endif %}</td></tr>
-                <tr><td>Numéro</td><td class="mono">{{ card.effective_local_id }}{% if card.local_id_override %} <span class="badge badge-low">Override</span>{% endif %}</td></tr>
-                <tr><td>Variant</td><td><span class="badge badge-disabled">{{ card.variant.value if card.variant else 'NORMAL' }}</span></td></tr>
-                <tr><td>Rareté</td><td>{{ card.rarity or '—' }}</td></tr>
-            </table>
+        <div class="flex-1">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Informations</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="flex justify-between sm:block">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Set</dt>
+                    <dd class="text-sm font-medium text-gray-900 dark:text-white">{{ card.effective_set_name }}{% if card.set_name_override %} <span class="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">Override</span>{% endif %}</dd>
+                </div>
+                <div class="flex justify-between sm:block">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Numero</dt>
+                    <dd class="text-sm font-medium font-mono text-gray-900 dark:text-white">{{ card.effective_local_id }}{% if card.local_id_override %} <span class="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">Override</span>{% endif %}</dd>
+                </div>
+                <div class="flex justify-between sm:block">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Variant</dt>
+                    <dd><span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-dark-500 text-gray-600 dark:text-gray-300">{{ card.variant.value if card.variant else 'NORMAL' }}</span></dd>
+                </div>
+                <div class="flex justify-between sm:block">
+                    <dt class="text-sm text-gray-500 dark:text-gray-400">Rarete</dt>
+                    <dd class="text-sm font-medium text-gray-900 dark:text-white">{{ card.rarity or '-' }}</dd>
+                </div>
+            </dl>
         </div>
     </div>
 </div>
 
-<!-- Section Edition des informations -->
-<div class="card">
-    <h2>Personnaliser les informations</h2>
-    <p style="margin-bottom: 16px; font-size: 13px; color: var(--text-secondary);">
-        Ces valeurs remplacent les données TCGdex dans toute l'application. Laisser vide pour utiliser les valeurs TCGdex.
-    </p>
+<!-- Edit Form -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Personnaliser</h2>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Ces valeurs remplacent TCGdex. Vide = valeur TCGdex.</p>
     <form id="card-info-form">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="name_override">Nom de la carte</label>
-                <input type="text" id="name_override" name="name_override" value="{{ card.name_override or '' }}" placeholder="{{ card.name }}">
-                <span style="font-size: 11px; color: var(--text-muted);">TCGdex: {{ card.name }}</span>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+                <label for="name_override" class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1.5">Nom</label>
+                <input type="text" id="name_override" value="{{ card.name_override or '' }}" placeholder="{{ card.name }}" class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500">
+                <p class="mt-1 text-[11px] text-gray-400">TCGdex: {{ card.name }}</p>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="local_id_override">Numéro de carte</label>
-                <input type="text" id="local_id_override" name="local_id_override" value="{{ card.local_id_override or '' }}" placeholder="{{ card.local_id }}">
-                <span style="font-size: 11px; color: var(--text-muted);">TCGdex: {{ card.local_id }}</span>
+            <div>
+                <label for="local_id_override" class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1.5">Numero</label>
+                <input type="text" id="local_id_override" value="{{ card.local_id_override or '' }}" placeholder="{{ card.local_id }}" class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500">
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="set_name_override">Nom de la série</label>
-                <input type="text" id="set_name_override" name="set_name_override" value="{{ card.set_name_override or '' }}" placeholder="{{ card.set_name }}">
-                <span style="font-size: 11px; color: var(--text-muted);">TCGdex: {{ card.set_name }}</span>
+            <div>
+                <label for="set_name_override" class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1.5">Serie</label>
+                <input type="text" id="set_name_override" value="{{ card.set_name_override or '' }}" placeholder="{{ card.set_name }}" class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500">
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="card_count_official_override">Total officiel du set (override)</label>
-                <input type="text" id="card_count_official_override" name="card_count_official_override" value="{{ card.card_count_official_override or '' }}" placeholder="">
-                <span style="font-size: 11px; color: var(--text-muted);">Construit X/Y avec local_id. Ex: 102, H32</span>
+            <div>
+                <label for="card_count_official_override" class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1.5">Total set</label>
+                <input type="text" id="card_count_official_override" value="{{ card.card_count_official_override or '' }}" class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500">
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="card_number_format">Format eBay</label>
-                <select id="card_number_format" name="card_number_format">
-                    <option value="">— Défaut (LOCAL_TOTAL) —</option>
-                    <option value="LOCAL_ONLY" {% if card.card_number_format and card.card_number_format.value == 'LOCAL_ONLY' %}selected{% endif %}>LOCAL_ONLY (25)</option>
-                    <option value="LOCAL_TOTAL" {% if card.card_number_format and card.card_number_format.value == 'LOCAL_TOTAL' %}selected{% endif %}>LOCAL_TOTAL (25/102)</option>
-                    <option value="PROMO" {% if card.card_number_format and card.card_number_format.value == 'PROMO' %}selected{% endif %}>PROMO (25 promo)</option>
+            <div>
+                <label for="card_number_format" class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1.5">Format eBay</label>
+                <select id="card_number_format" class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+                    <option value="">Defaut (LOCAL_TOTAL)</option>
+                    <option value="LOCAL_ONLY" {% if card.card_number_format and card.card_number_format.value == 'LOCAL_ONLY' %}selected{% endif %}>LOCAL_ONLY</option>
+                    <option value="LOCAL_TOTAL" {% if card.card_number_format and card.card_number_format.value == 'LOCAL_TOTAL' %}selected{% endif %}>LOCAL_TOTAL</option>
+                    <option value="PROMO" {% if card.card_number_format and card.card_number_format.value == 'PROMO' %}selected{% endif %}>PROMO</option>
                 </select>
-                <span style="font-size: 11px; color: var(--text-muted);">Actuel: {{ card.card_number_format.value if card.card_number_format else 'LOCAL_TOTAL' }}</span>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="card_number_padded">Padding zéros</label>
-                <div style="display: flex; align-items: center; gap: 8px; height: 38px;">
-                    <input type="checkbox" id="card_number_padded" name="card_number_padded" {% if card.card_number_padded %}checked{% endif %} style="width: 18px; height: 18px;">
-                    <span style="font-size: 13px;">1/92 → 001/092</span>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase mb-1.5">Padding</label>
+                <div class="flex items-center gap-3 h-10">
+                    <input type="checkbox" id="card_number_padded" {% if card.card_number_padded %}checked{% endif %} class="w-5 h-5 rounded border-gray-300 dark:border-dark-500 text-blue-600 focus:ring-blue-500">
+                    <span class="text-sm text-gray-600 dark:text-gray-300">001/092</span>
                 </div>
-                <span style="font-size: 11px; color: var(--text-muted);">Complète avec des zéros (XXX/XXX)</span>
             </div>
         </div>
-        <div style="margin-top: 16px; display: flex; gap: 12px;">
-            <button type="submit" class="btn btn-success" id="save-info-btn">Sauvegarder</button>
-            <button type="button" class="btn btn-ghost" onclick="resetOverrides()">Réinitialiser</button>
+        <div class="mt-4 flex gap-3">
+            <button type="submit" id="save-info-btn" class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">Sauvegarder</button>
+            <button type="button" onclick="resetOverrides()" class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-dark-500 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-600">Reset</button>
         </div>
     </form>
 </div>
 
+<!-- eBay Query -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Requete eBay</h2>
+    {% if card.ebay_query_override %}
+    <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 mb-2">Override</span>
+    <div class="bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg p-4 font-mono text-sm text-gray-900 dark:text-white break-all mb-4">{{ card.ebay_query_override }}</div>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">Auto-generee:</p>
+    {% endif %}
+    <div class="bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg p-4 font-mono text-sm text-gray-900 dark:text-white break-all">{{ card.ebay_query or 'Non generee' }}</div>
+</div>
+
+<!-- Photo Modal -->
+<div id="photo-modal" onclick="closePhotoModal()" class="hidden fixed inset-0 bg-black/85 z-50 items-center justify-center cursor-pointer">
+    <img id="photo-modal-img" src="" alt="" class="max-w-[90%] max-h-[90%] object-contain rounded-lg shadow-2xl">
+    <button onclick="closePhotoModal()" class="absolute top-4 right-4 w-10 h-10 flex items-center justify-center bg-white dark:bg-dark-700 rounded-full text-xl">&times;</button>
+</div>
+
+<!-- eBay Listings -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Annonces eBay</h2>
+        <button id="refresh-listings" onclick="loadListings(true)" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">Actualiser</button>
+    </div>
+    <div id="listings-container"><div class="text-center py-12 text-gray-500 dark:text-gray-400">Chargement...</div></div>
+</div>
+
+<!-- Sold Listings -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Ventes detectees</h2>
+    {% if sold_listings %}
+    {% set v_count = sold_stats.count if sold_stats else sold_listings|length %}
+    <div class="bg-gray-50 dark:bg-dark-600 rounded-lg p-4 mb-4">
+        <div class="flex flex-wrap gap-4 items-center">
+            <span class="font-medium text-gray-900 dark:text-white">{{ v_count }} ventes</span>
+            {% if sold_stats %}
+            {% if sold_stats.p20 %}<span class="text-sm">p20: <strong>{{ "%.2f"|format(sold_stats.p20) }} &euro;</strong></span>{% endif %}
+            {% if sold_stats.p50 %}<span class="text-sm">p50: {{ "%.2f"|format(sold_stats.p50) }} &euro;</span>{% endif %}
+            {% endif %}
+        </div>
+    </div>
+    <div class="overflow-x-auto max-h-80">
+        <table class="w-full min-w-[600px]">
+            <thead><tr class="border-b border-gray-200 dark:border-dark-500">
+                <th class="w-14 px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Photo</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th>
+                <th class="w-24 px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Prix</th>
+                <th class="w-16 px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Duree</th>
+                <th class="w-20 px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Date</th>
+            </tr></thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-dark-500">
+            {% for sold in sold_listings %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
+                <td class="px-3 py-2">{% if sold.image_url %}<img src="{{ sold.image_url }}" onclick="openPhotoModal('{{ sold.image_url }}')" class="w-10 h-10 object-contain rounded bg-gray-100 dark:bg-dark-600 cursor-pointer">{% endif %}</td>
+                <td class="px-3 py-2 max-w-[180px]"><div class="truncate text-sm text-gray-900 dark:text-white">{{ sold.title or '-' }}</div></td>
+                <td class="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 tabular-nums">{{ "%.2f"|format(sold.effective_price or 0) }} &euro;</td>
+                <td class="px-3 py-2 text-center text-sm font-mono {% if sold.duration_days is not none and sold.duration_days <= 7 %}text-green-600{% else %}text-gray-500{% endif %}">{% if sold.duration_days is not none %}{{ sold.duration_days }}j{% else %}-{% endif %}</td>
+                <td class="px-3 py-2 text-center text-xs text-gray-500 font-mono">{{ sold.detected_sold_at.strftime('%d/%m/%y') }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-gray-500 dark:text-gray-400">Aucune vente detectee</div>
+    {% endif %}
+</div>
+
+{% if snapshots %}
+<!-- Snapshots History -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 overflow-hidden">
+    <div class="p-6 pb-0"><h2 class="text-lg font-semibold text-gray-900 dark:text-white">Historique</h2></div>
+    <div class="overflow-x-auto">
+        <table class="w-full min-w-[700px]">
+            <thead><tr class="border-b border-gray-200 dark:border-dark-500 bg-gray-50 dark:bg-dark-600">
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Ann.</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">p20</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">p50</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">p80</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Disp.</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Cons.</th>
+            </tr></thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-dark-500">
+            {% for snap in snapshots %}
+            <tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
+                <td class="px-4 py-3 font-mono text-sm text-gray-900 dark:text-white">{{ snap.as_of_date }}</td>
+                <td class="px-4 py-3 text-center text-sm text-gray-600 dark:text-gray-400">{{ snap.active_count or '-' }}</td>
+                <td class="px-4 py-3 text-right text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p20) if snap.p20 else '-' }}</td>
+                <td class="px-4 py-3 text-right text-sm tabular-nums text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p50) if snap.p50 else '-' }}</td>
+                <td class="px-4 py-3 text-right text-sm tabular-nums text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p80) if snap.p80 else '-' }}</td>
+                <td class="px-4 py-3 text-center text-sm {% if snap.dispersion and snap.dispersion > 4 %}text-red-500{% else %}text-gray-600{% endif %}">{{ "%.2f"|format(snap.dispersion) if snap.dispersion else '-' }}</td>
+                <td class="px-4 py-3 text-center text-sm {% if snap.consensus_score and snap.consensus_score >= 70 %}text-green-600{% elif snap.consensus_score and snap.consensus_score < 50 %}text-red-500{% else %}text-gray-600{% endif %}">{{ "%.0f%%"|format(snap.consensus_score) if snap.consensus_score else '-' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
 <script>
+const cardId = {{ card.id }};
+let currentListings = [];
+
 document.getElementById('card-info-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     const btn = document.getElementById('save-info-btn');
-    btn.disabled = true;
-    btn.textContent = 'Sauvegarde...';
-
+    btn.disabled = true; btn.textContent = 'Sauvegarde...';
     try {
         const response = await fetch('/api/cards/{{ card.id }}/update-info', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name_override: document.getElementById('name_override').value.trim() || null,
                 local_id_override: document.getElementById('local_id_override').value.trim() || null,
@@ -113,259 +242,49 @@ document.getElementById('card-info-form').addEventListener('submit', async funct
             })
         });
         const data = await response.json();
-        if (data.success) {
-            btn.textContent = 'Sauvegardé !';
-            setTimeout(() => location.reload(), 500);
-        } else {
-            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-            btn.textContent = 'Sauvegarder';
-        }
-    } catch (error) {
-        alert('Erreur: ' + error.message);
-        btn.textContent = 'Sauvegarder';
-    } finally {
-        btn.disabled = false;
-    }
+        if (data.success) { showToast('Sauvegarde', 'success'); setTimeout(() => location.reload(), 1000); }
+        else { showToast('Erreur: ' + (data.error || 'Erreur'), 'error'); }
+    } catch (error) { showToast('Erreur: ' + error.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Sauvegarder'; }
 });
 
 function resetOverrides() {
-    if (confirm('Réinitialiser tous les overrides pour cette carte ?')) {
-        document.getElementById('name_override').value = '';
-        document.getElementById('local_id_override').value = '';
-        document.getElementById('set_name_override').value = '';
-        document.getElementById('card_count_official_override').value = '';
+    if (confirm('Reinitialiser tous les overrides ?')) {
+        ['name_override','local_id_override','set_name_override','card_count_official_override'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('card_number_format').value = '';
         document.getElementById('card_number_padded').checked = false;
         document.getElementById('card-info-form').dispatchEvent(new Event('submit'));
     }
 }
-</script>
 
-<div class="card">
-    <h2>Requête eBay</h2>
-    {% if card.ebay_query_override %}
-        <p style="margin-bottom: 12px;"><span class="badge badge-low">Override actif</span></p>
-        <div class="code-block">{{ card.ebay_query_override }}</div>
-        <p style="margin-top: 20px; margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">Requête auto-générée (non utilisée) :</p>
-    {% endif %}
-    <div class="code-block">{{ card.ebay_query or 'Non générée — lancez python3 cli.py generate-queries' }}</div>
-</div>
-
-<!-- Modal zoom photo -->
-<div id="photo-modal" onclick="closePhotoModal()" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; cursor: pointer; align-items: center; justify-content: center;">
-    <img id="photo-modal-img" src="" alt="" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-    <button onclick="closePhotoModal()" style="position: absolute; top: 20px; right: 20px; background: var(--bg-primary); border: none; color: var(--text-primary); width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer;">&times;</button>
-</div>
-
-<!-- Annonces eBay -->
-<div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="margin: 0;">Annonces eBay</h2>
-        <button id="refresh-listings" class="btn btn-primary" onclick="loadListings(true)">
-            Actualiser depuis eBay
-        </button>
-    </div>
-    <div id="listings-container">
-        <div class="empty-state">
-            <p>Chargement des annonces...</p>
-        </div>
-    </div>
-</div>
-
-<script>
-const cardId = {{ card.id }};
-let currentListings = [];
-let currentStats = null;
-let currentSnapshotDate = null;
-let currentSort = { field: 'price', direction: 'asc' };
-
-function formatListingDate(dateStr) {
-    if (!dateStr) return '—';
-    try {
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return '—';
-        return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    } catch {
-        return '—';
-    }
-}
-
-function sortListings(field, direction = null) {
-    if (direction) {
-        // Direction explicite (clic sur flèche)
-        currentSort.field = field;
-        currentSort.direction = direction;
-    } else if (currentSort.field === field) {
-        // Toggle si même champ
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        // Nouveau champ
-        currentSort.field = field;
-        currentSort.direction = field === 'price' ? 'asc' : 'desc';
-    }
-
-    currentListings.sort((a, b) => {
-        let valA, valB;
-        if (field === 'price') {
-            valA = a.effective_price || a.price || 0;
-            valB = b.effective_price || b.price || 0;
-        } else if (field === 'date') {
-            valA = a.listing_date ? new Date(a.listing_date).getTime() : 0;
-            valB = b.listing_date ? new Date(b.listing_date).getTime() : 0;
-        } else if (field === 'title') {
-            valA = (a.title || '').toLowerCase();
-            valB = (b.title || '').toLowerCase();
-        }
-
-        if (currentSort.direction === 'asc') {
-            return valA > valB ? 1 : valA < valB ? -1 : 0;
-        } else {
-            return valA < valB ? 1 : valA > valB ? -1 : 0;
-        }
-    });
-
-    renderListings();
-}
-
-function getSortHeader(field, label) {
-    const isActive = currentSort.field === field;
-    const isAsc = currentSort.direction === 'asc';
-    return `
-        <div style="display: flex; align-items: center; gap: 4px;">
-            <span>${label}</span>
-            <div style="display: flex; flex-direction: column; line-height: 0.6; font-size: 10px;">
-                <span onclick="event.stopPropagation(); sortListings('${field}', 'asc')"
-                      style="cursor: pointer; opacity: ${isActive && isAsc ? '1' : '0.3'}; color: ${isActive && isAsc ? 'var(--primary)' : 'inherit'};">▲</span>
-                <span onclick="event.stopPropagation(); sortListings('${field}', 'desc')"
-                      style="cursor: pointer; opacity: ${isActive && !isAsc ? '1' : '0.3'}; color: ${isActive && !isAsc ? 'var(--primary)' : 'inherit'};">▼</span>
-            </div>
-        </div>
-    `;
-}
-
-function openPhotoModal(imageUrl) {
-    const modal = document.getElementById('photo-modal');
-    const img = document.getElementById('photo-modal-img');
-    img.src = imageUrl;
-    modal.style.display = 'flex';
+function openPhotoModal(url) {
+    document.getElementById('photo-modal-img').src = url;
+    document.getElementById('photo-modal').classList.remove('hidden');
+    document.getElementById('photo-modal').classList.add('flex');
     document.body.style.overflow = 'hidden';
 }
-
 function closePhotoModal() {
-    const modal = document.getElementById('photo-modal');
-    modal.style.display = 'none';
+    document.getElementById('photo-modal').classList.add('hidden');
+    document.getElementById('photo-modal').classList.remove('flex');
     document.body.style.overflow = '';
 }
-
-// Fermer avec Escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closePhotoModal();
-});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePhotoModal(); });
 
 function renderListings() {
     const container = document.getElementById('listings-container');
-
     if (currentListings.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <p>Aucune annonce stockée</p>
-                <p style="font-size: 14px; color: var(--text-secondary);">Cliquez sur "Actualiser depuis eBay" pour collecter les annonces</p>
-            </div>
-        `;
+        container.innerHTML = '<div class="text-center py-12 text-gray-500">Aucune annonce. Cliquez Actualiser.</div>';
         return;
     }
-
-    // Badge de fiabilité
-    const count = currentListings.length;
-    let reliabilityBadge = '';
-    if (count >= 10) {
-        reliabilityBadge = '<span class="badge badge-ok" title="Stats fiables (>= 10 annonces)">Fiable</span>';
-    } else if (count >= 5) {
-        reliabilityBadge = '<span class="badge badge-warning" title="Stats approximatives (5-9 annonces)">Approx.</span>';
-    } else {
-        reliabilityBadge = '<span class="badge badge-low" title="Stats peu fiables (< 5 annonces)">Peu fiable</span>';
+    let html = '<div class="overflow-x-auto max-h-80"><table class="w-full min-w-[500px]"><thead><tr class="border-b border-gray-200 dark:border-dark-500"><th class="w-14 px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Photo</th><th class="w-24 px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Prix</th><th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th><th class="w-16 px-3 py-2"></th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-dark-500">';
+    for (const l of currentListings) {
+        html += `<tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
+            <td class="px-3 py-2">${l.image ? `<img src="${l.image}" onclick="openPhotoModal('${l.image}')" class="w-10 h-10 object-contain rounded bg-gray-100 dark:bg-dark-600 cursor-pointer">` : ''}</td>
+            <td class="px-3 py-2 text-right"><div class="font-semibold text-gray-900 dark:text-white tabular-nums">${(l.price||0).toFixed(2)} &euro;</div>${l.shipping > 0 ? `<div class="text-xs text-gray-500">+${l.shipping.toFixed(2)}</div>` : ''}</td>
+            <td class="px-3 py-2 max-w-[180px]"><div class="truncate text-sm text-gray-900 dark:text-white">${l.title || '-'}</div></td>
+            <td class="px-3 py-2">${l.url ? `<a href="${l.url}" target="_blank" class="text-xs text-blue-600">Voir</a>` : ''}</td>
+        </tr>`;
     }
-
-    // Afficher percentiles seulement si >= 10, sinon min/max/median
-    let statsHtml = '';
-    if (count >= 10 && currentStats) {
-        statsHtml = `
-            ${currentStats.p10 ? `<div>p10: <span class="price">${currentStats.p10.toFixed(2)} €</span></div>` : ''}
-            ${currentStats.p20 ? `<div>p20: <span class="price" style="font-weight: 600;">${currentStats.p20.toFixed(2)} €</span></div>` : ''}
-            ${currentStats.p50 ? `<div>p50: <span class="price">${currentStats.p50.toFixed(2)} €</span></div>` : ''}
-            ${currentStats.p80 ? `<div>p80: <span class="price">${currentStats.p80.toFixed(2)} €</span></div>` : ''}
-            ${currentStats.p90 ? `<div>p90: <span class="price">${currentStats.p90.toFixed(2)} €</span></div>` : ''}
-        `;
-    } else if (count > 0) {
-        // Calculer min/max/median depuis les listings
-        const prices = currentListings.map(l => l.effective_price || l.price || 0).filter(p => p > 0).sort((a, b) => a - b);
-        if (prices.length > 0) {
-            const min = prices[0];
-            const max = prices[prices.length - 1];
-            const median = prices[Math.floor(prices.length / 2)];
-            statsHtml = `
-                <div>Min: <span class="price">${min.toFixed(2)} €</span></div>
-                <div>Med: <span class="price" style="font-weight: 600;">${median.toFixed(2)} €</span></div>
-                <div>Max: <span class="price">${max.toFixed(2)} €</span></div>
-            `;
-        }
-    }
-
-    let html = `
-        <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-                <div><strong>${count}</strong> annonces (max 50) ${reliabilityBadge}</div>
-                ${statsHtml}
-            </div>
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
-                ${count >= 10 && currentStats?.dispersion ? `<div>Dispersion: <span class="${currentStats.dispersion > 4 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.dispersion.toFixed(2)}</span></div>` : ''}
-                ${count >= 10 && currentStats?.cv != null ? `<div>CV: <span style="color: var(--text-primary);">${(currentStats.cv * 100).toFixed(0)}%</span></div>` : ''}
-                ${currentStats?.consensus_score != null ? `<div>Consensus: <span class="${currentStats.consensus_score >= 70 ? 'badge badge-ok' : currentStats.consensus_score < 50 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.consensus_score.toFixed(0)}%</span></div>` : ''}
-                ${currentStats?.age_median_days != null ? `<div>Âge médian: <span class="${currentStats.age_median_days > 30 ? 'badge badge-low' : ''}" style="color: var(--text-primary);">${currentStats.age_median_days.toFixed(0)}j</span></div>` : ''}
-                ${currentStats?.pct_recent_7d != null ? `<div>< 7j: <span style="color: var(--text-primary);">${currentStats.pct_recent_7d.toFixed(0)}%</span></div>` : ''}
-                ${currentSnapshotDate ? `<div>Snapshot: ${currentSnapshotDate}</div>` : ''}
-            </div>
-        </div>
-        <div style="max-height: 600px; overflow-y: auto;">
-            <table style="margin: 0;">
-                <thead>
-                    <tr>
-                        <th style="width: 60px;">Photo</th>
-                        <th style="width: 100px;">${getSortHeader('price', 'Prix')}</th>
-                        <th>${getSortHeader('title', 'Titre')}</th>
-                        <th style="width: 100px;">${getSortHeader('date', 'Date')}</th>
-                        <th style="width: 80px;">Lien</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    for (const listing of currentListings) {
-        const basePrice = listing.price || 0;
-        const shipping = listing.shipping || 0;
-        const title = listing.title || '';
-        const url = listing.url || '';
-        const image = listing.image || '';
-        const listingDate = formatListingDate(listing.listing_date);
-
-        html += `
-            <tr>
-                <td style="padding: 4px;">
-                    ${image ? `<img src="${image}" alt="" onclick="openPhotoModal('${image}')" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: var(--bg-secondary); cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">` : '<div style="width: 50px; height: 50px; background: var(--bg-secondary); border-radius: 4px;"></div>'}
-                </td>
-                <td>
-                    <div class="price" style="font-weight: 600;">${basePrice.toFixed(2)} €</div>
-                    ${shipping > 0 ? `<div style="font-size: 11px; color: var(--text-secondary);">+ ${shipping.toFixed(2)} € port</div>` : '<div style="font-size: 11px; color: var(--accent-green);">Port gratuit</div>'}
-                </td>
-                <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${title}">${title}</td>
-                <td class="mono" style="font-size: 12px; color: var(--text-secondary);">${listingDate}</td>
-                <td>
-                    ${url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">Voir</a>` : '—'}
-                </td>
-            </tr>
-        `;
-    }
-
     html += '</tbody></table></div>';
     container.innerHTML = html;
 }
@@ -373,393 +292,18 @@ function renderListings() {
 async function loadListings(refresh = false) {
     const container = document.getElementById('listings-container');
     const btn = document.getElementById('refresh-listings');
-
-    if (refresh) {
-        btn.disabled = true;
-        btn.textContent = 'Chargement...';
-    }
-
-    container.innerHTML = '<div class="empty-state"><p>Chargement des annonces...</p></div>';
-
+    if (refresh) { btn.disabled = true; btn.textContent = 'Chargement...'; }
+    container.innerHTML = '<div class="text-center py-12 text-gray-500">Chargement...</div>';
     try {
-        const url = `/api/cards/${cardId}/listings` + (refresh ? '?refresh=true' : '');
-        const response = await fetch(url);
+        const response = await fetch(`/api/cards/${cardId}/listings` + (refresh ? '?refresh=true' : ''));
         const data = await response.json();
-
-        if (!data.success) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <p style="color: var(--danger);">${data.error || 'Erreur lors du chargement'}</p>
-                    ${data.query ? `<p class="mono" style="font-size: 12px; margin-top: 8px;">Query: ${data.query}</p>` : ''}
-                </div>
-            `;
-            return;
-        }
-
-        // Stocker les données
-        currentListings = data.listings || [];
-        currentStats = data.stats || null;
-        currentSnapshotDate = data.snapshot_date || null;
-
-        // Trier par prix croissant par défaut
-        currentSort = { field: 'price', direction: 'asc' };
-        currentListings.sort((a, b) => {
-            const priceA = a.effective_price || a.price || 0;
-            const priceB = b.effective_price || b.price || 0;
-            return priceA - priceB;
-        });
-
+        if (!data.success) { container.innerHTML = `<div class="text-center py-12 text-red-500">${data.error || 'Erreur'}</div>`; return; }
+        currentListings = (data.listings || []).sort((a, b) => (a.effective_price || a.price || 0) - (b.effective_price || b.price || 0));
         renderListings();
-
-    } catch (error) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <p style="color: var(--danger);">Erreur: ${error.message}</p>
-            </div>
-        `;
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Actualiser depuis eBay';
-    }
+    } catch (error) { container.innerHTML = `<div class="text-center py-12 text-red-500">Erreur: ${error.message}</div>`; }
+    finally { btn.disabled = false; btn.textContent = 'Actualiser'; }
 }
 
-// Charger les annonces au chargement de la page
 document.addEventListener('DOMContentLoaded', () => loadListings(false));
 </script>
-
-<!-- Ventes detectees -->
-<div class="card">
-    <h2>Ventes detectees</h2>
-    {% if sold_listings %}
-    <!-- Stats des ventes -->
-    {% set v_count = sold_stats.count if sold_stats else sold_listings|length %}
-    <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
-        <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-            <div>
-                <strong>{{ v_count }}</strong> ventes
-                {% if v_count >= 10 %}
-                <span class="badge badge-ok" title="Stats fiables (>= 10 ventes)">Fiable</span>
-                {% elif v_count >= 5 %}
-                <span class="badge badge-warning" title="Stats approximatives (5-9 ventes)">Approx.</span>
-                {% else %}
-                <span class="badge badge-low" title="Stats peu fiables (< 5 ventes)">Peu fiable</span>
-                {% endif %}
-            </div>
-            {% if sold_stats and v_count >= 10 %}
-            {% if sold_stats.p10 %}<div>p10: <span class="price">{{ "%.2f"|format(sold_stats.p10) }} €</span></div>{% endif %}
-            {% if sold_stats.p20 %}<div>p20: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(sold_stats.p20) }} €</span></div>{% endif %}
-            {% if sold_stats.p50 %}<div>p50: <span class="price">{{ "%.2f"|format(sold_stats.p50) }} €</span></div>{% endif %}
-            {% if sold_stats.p80 %}<div>p80: <span class="price">{{ "%.2f"|format(sold_stats.p80) }} €</span></div>{% endif %}
-            {% if sold_stats.p90 %}<div>p90: <span class="price">{{ "%.2f"|format(sold_stats.p90) }} €</span></div>{% endif %}
-            {% elif sold_stats and v_count < 10 %}
-            {# Afficher min/max/moy si < 10 ventes #}
-            <div>Min: <span class="price">{{ "%.2f"|format(sold_stats.p10) }} €</span></div>
-            <div>Max: <span class="price">{{ "%.2f"|format(sold_stats.p90) }} €</span></div>
-            <div>Med: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(sold_stats.p50) }} €</span></div>
-            {% endif %}
-        </div>
-        <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
-            {% if sold_stats %}
-            {% if sold_stats.dispersion %}<div>Dispersion: <span class="{% if sold_stats.dispersion > 4 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.2f"|format(sold_stats.dispersion) }}</span></div>{% endif %}
-            {% if sold_stats.cv is defined and sold_stats.cv is not none %}<div>CV: <span style="color: var(--text-primary);">{{ "%.0f"|format(sold_stats.cv * 100) }}%</span></div>{% endif %}
-            {% if sold_stats.median_duration_days is defined and sold_stats.median_duration_days is not none %}<div>Duree mediane: <span style="color: var(--text-primary);">{{ "%.0f"|format(sold_stats.median_duration_days) }}j</span></div>{% endif %}
-            {% if sold_stats.avg_duration_days is defined and sold_stats.avg_duration_days is not none %}<div>Duree moyenne: <span style="color: var(--text-primary);">{{ "%.0f"|format(sold_stats.avg_duration_days) }}j</span></div>{% endif %}
-            {% endif %}
-        </div>
-    </div>
-    <div style="max-height: 400px; overflow-y: auto;">
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 60px;">Photo</th>
-                    <th>Titre</th>
-                    <th style="width: 100px;">Prix</th>
-                    <th style="width: 80px;">Duree</th>
-                    <th style="width: 100px;">Vendeur</th>
-                    <th style="width: 100px;">Detectee le</th>
-                    <th style="width: 80px;">Lien</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for sold in sold_listings %}
-                <tr>
-                    <td style="padding: 4px;">
-                        {% if sold.image_url %}
-                        <img src="{{ sold.image_url }}" alt="" onclick="openPhotoModal('{{ sold.image_url }}')" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: var(--bg-secondary); cursor: pointer;">
-                        {% else %}
-                        <div style="width: 50px; height: 50px; background: var(--bg-secondary); border-radius: 4px;"></div>
-                        {% endif %}
-                    </td>
-                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ sold.title }}">
-                        {{ sold.title or '—' }}
-                        {% if sold.is_reverse %}<span class="badge badge-low" style="margin-left: 4px;">REVERSE</span>{% endif %}
-                        <div style="font-size: 11px; color: var(--text-secondary);">{{ sold.condition or '' }}</div>
-                    </td>
-                    <td>
-                        <span class="price price-main">{{ "%.2f"|format(sold.effective_price or 0) }} €</span>
-                        {% if sold.price and sold.effective_price and sold.effective_price != sold.price %}
-                        <div style="font-size: 11px; color: var(--text-secondary);">Base: {{ "%.2f"|format(sold.price) }} €</div>
-                        {% endif %}
-                    </td>
-                    <td class="mono" style="font-size: 12px;">
-                        {% if sold.duration_days is not none %}
-                        <span class="{% if sold.duration_days <= 7 %}text-primary{% elif sold.duration_days <= 14 %}text-secondary{% else %}text-muted{% endif %}">
-                            {{ sold.duration_days }}j
-                        </span>
-                        {% else %}
-                        <span class="text-muted">—</span>
-                        {% endif %}
-                    </td>
-                    <td class="text-secondary" style="font-size: 12px;">{{ sold.seller or '—' }}</td>
-                    <td class="mono" style="font-size: 12px; color: var(--text-secondary);">{{ sold.detected_sold_at.strftime('%d/%m/%y') }}</td>
-                    <td>
-                        {% if sold.url %}
-                        <a href="{{ sold.url }}" target="_blank" rel="noopener" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">eBay</a>
-                        {% else %}
-                        —
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% else %}
-    <div class="empty-state" style="padding: 30px;">
-        <p>Aucune vente detectee pour cette carte</p>
-        <p style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">Les ventes seront detectees lors des prochains batchs</p>
-    </div>
-    {% endif %}
-</div>
-
-{% if snapshots and snapshots[0].reverse_sample_size %}
-<!-- Section Stats Reverse -->
-<div class="card">
-    <div class="card-header">
-        <h2 style="margin: 0;">Annonces Reverse</h2>
-    </div>
-    <div id="reverse-listings-container">
-        <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-                <div><strong>{{ snapshots[0].reverse_sample_size }}</strong> annonces</div>
-                {% if snapshots[0].reverse_p10 %}<div>p10: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p10) }} €</span></div>{% endif %}
-                {% if snapshots[0].reverse_p20 %}<div>p20: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(snapshots[0].reverse_p20) }} €</span></div>{% endif %}
-                {% if snapshots[0].reverse_p50 %}<div>p50: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p50) }} €</span></div>{% endif %}
-                {% if snapshots[0].reverse_p80 %}<div>p80: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p80) }} €</span></div>{% endif %}
-                {% if snapshots[0].reverse_p90 %}<div>p90: <span class="price">{{ "%.2f"|format(snapshots[0].reverse_p90) }} €</span></div>{% endif %}
-            </div>
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
-                {% if snapshots[0].reverse_dispersion %}<div>Dispersion: <span class="{% if snapshots[0].reverse_dispersion > 4 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.2f"|format(snapshots[0].reverse_dispersion) }}</span></div>{% endif %}
-                {% if snapshots[0].reverse_cv is not none %}<div>CV: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_cv * 100) }}%</span></div>{% endif %}
-                {% if snapshots[0].reverse_consensus_score is not none %}<div>Consensus: <span class="{% if snapshots[0].reverse_consensus_score >= 70 %}badge badge-ok{% elif snapshots[0].reverse_consensus_score < 50 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_consensus_score) }}%</span></div>{% endif %}
-                {% if snapshots[0].reverse_age_median_days is not none %}<div>Âge médian: <span class="{% if snapshots[0].reverse_age_median_days > 30 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_age_median_days) }}j</span></div>{% endif %}
-                {% if snapshots[0].reverse_pct_recent_7d is not none %}<div>< 7j: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].reverse_pct_recent_7d) }}%</span></div>{% endif %}
-                <div>Snapshot: {{ snapshots[0].created_at.strftime('%d/%m/%y %H:%M') if snapshots[0].created_at else snapshots[0].as_of_date }}</div>
-            </div>
-        </div>
-        <!-- Liste des annonces reverse -->
-        <div id="reverse-listings-table" style="max-height: 400px; overflow-y: auto;"></div>
-    </div>
-</div>
-
-<script>
-// Charger les annonces reverse depuis les metadata
-(function() {
-    const cardId = {{ card.id }};
-    fetch(`/api/cards/${cardId}/listings`)
-        .then(r => r.json())
-        .then(data => {
-            const reverseListings = data.reverse_listings || [];
-            const container = document.getElementById('reverse-listings-table');
-
-            if (reverseListings.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px;">Aucune annonce reverse stockée</p>';
-                return;
-            }
-
-            let html = `<table style="margin: 0;">
-                <thead>
-                    <tr>
-                        <th style="width: 60px;">Photo</th>
-                        <th style="width: 100px;">Prix</th>
-                        <th>Titre</th>
-                        <th style="width: 100px;">Date</th>
-                        <th style="width: 80px;">Lien</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-            for (const listing of reverseListings) {
-                const basePrice = listing.price || 0;
-                const shipping = listing.shipping || 0;
-                const title = listing.title || '';
-                const url = listing.url || '';
-                const image = listing.image || '';
-                let listingDate = '';
-                if (listing.listing_date) {
-                    const d = new Date(listing.listing_date);
-                    listingDate = d.toLocaleDateString('fr-FR');
-                }
-
-                html += `<tr>
-                    <td style="padding: 4px;">
-                        ${image ? `<img src="${image}" alt="" onclick="openPhotoModal('${image}')" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: var(--bg-secondary); cursor: pointer;">` : '<div style="width: 50px; height: 50px; background: var(--bg-secondary); border-radius: 4px;"></div>'}
-                    </td>
-                    <td>
-                        <div class="price" style="font-weight: 600;">${basePrice.toFixed(2)} €</div>
-                        ${shipping > 0 ? `<div style="font-size: 11px; color: var(--text-secondary);">+ ${shipping.toFixed(2)} € port</div>` : '<div style="font-size: 11px; color: var(--accent-green);">Port gratuit</div>'}
-                    </td>
-                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${title}">${title}</td>
-                    <td class="mono" style="font-size: 12px; color: var(--text-secondary);">${listingDate}</td>
-                    <td>
-                        ${url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">Voir</a>` : '—'}
-                    </td>
-                </tr>`;
-            }
-
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        })
-        .catch(() => {});
-})();
-</script>
-{% endif %}
-
-{% if snapshots and snapshots[0].graded_sample_size %}
-<!-- Section Stats Graded -->
-<div class="card">
-    <div class="card-header">
-        <h2 style="margin: 0;">Annonces Gradées (PSA, CGC, etc.)</h2>
-    </div>
-    <div id="graded-listings-container">
-        <div style="margin-bottom: 16px; padding: 16px; background: var(--bg-secondary); border-radius: 8px;">
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;">
-                <div><strong>{{ snapshots[0].graded_sample_size }}</strong> annonces</div>
-                {% if snapshots[0].graded_p10 %}<div>p10: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p10) }} €</span></div>{% endif %}
-                {% if snapshots[0].graded_p20 %}<div>p20: <span class="price" style="font-weight: 600;">{{ "%.2f"|format(snapshots[0].graded_p20) }} €</span></div>{% endif %}
-                {% if snapshots[0].graded_p50 %}<div>p50: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p50) }} €</span></div>{% endif %}
-                {% if snapshots[0].graded_p80 %}<div>p80: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p80) }} €</span></div>{% endif %}
-                {% if snapshots[0].graded_p90 %}<div>p90: <span class="price">{{ "%.2f"|format(snapshots[0].graded_p90) }} €</span></div>{% endif %}
-            </div>
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-size: 13px; color: var(--text-secondary);">
-                {% if snapshots[0].graded_dispersion %}<div>Dispersion: <span class="{% if snapshots[0].graded_dispersion > 4 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.2f"|format(snapshots[0].graded_dispersion) }}</span></div>{% endif %}
-                {% if snapshots[0].graded_cv is not none %}<div>CV: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_cv * 100) }}%</span></div>{% endif %}
-                {% if snapshots[0].graded_consensus_score is not none %}<div>Consensus: <span class="{% if snapshots[0].graded_consensus_score >= 70 %}badge badge-ok{% elif snapshots[0].graded_consensus_score < 50 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_consensus_score) }}%</span></div>{% endif %}
-                {% if snapshots[0].graded_age_median_days is not none %}<div>Âge médian: <span class="{% if snapshots[0].graded_age_median_days > 30 %}badge badge-low{% endif %}" style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_age_median_days) }}j</span></div>{% endif %}
-                {% if snapshots[0].graded_pct_recent_7d is not none %}<div>< 7j: <span style="color: var(--text-primary);">{{ "%.0f"|format(snapshots[0].graded_pct_recent_7d) }}%</span></div>{% endif %}
-                <div>Snapshot: {{ snapshots[0].created_at.strftime('%d/%m/%y %H:%M') if snapshots[0].created_at else snapshots[0].as_of_date }}</div>
-            </div>
-        </div>
-        <!-- Liste des annonces graded -->
-        <div id="graded-listings-table" style="max-height: 400px; overflow-y: auto;"></div>
-    </div>
-</div>
-
-<script>
-// Charger les annonces graded depuis les metadata
-(function() {
-    const cardId = {{ card.id }};
-    fetch(`/api/cards/${cardId}/listings`)
-        .then(r => r.json())
-        .then(data => {
-            const gradedListings = data.graded_listings || [];
-            const container = document.getElementById('graded-listings-table');
-
-            if (gradedListings.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px;">Aucune annonce gradée stockée</p>';
-                return;
-            }
-
-            let html = `<table style="margin: 0;">
-                <thead>
-                    <tr>
-                        <th style="width: 60px;">Photo</th>
-                        <th style="width: 100px;">Prix</th>
-                        <th>Titre</th>
-                        <th style="width: 100px;">Date</th>
-                        <th style="width: 80px;">Lien</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-
-            for (const listing of gradedListings) {
-                const basePrice = listing.price || 0;
-                const shipping = listing.shipping || 0;
-                const title = listing.title || '';
-                const url = listing.url || '';
-                const image = listing.image || '';
-                let listingDate = '';
-                if (listing.listing_date) {
-                    const d = new Date(listing.listing_date);
-                    listingDate = d.toLocaleDateString('fr-FR');
-                }
-
-                html += `<tr>
-                    <td style="padding: 4px;">
-                        ${image ? `<img src="${image}" alt="" onclick="openPhotoModal('${image}')" style="width: 50px; height: 50px; object-fit: contain; border-radius: 4px; background: var(--bg-secondary); cursor: pointer;">` : '<div style="width: 50px; height: 50px; background: var(--bg-secondary); border-radius: 4px;"></div>'}
-                    </td>
-                    <td>
-                        <div class="price" style="font-weight: 600;">${basePrice.toFixed(2)} €</div>
-                        ${shipping > 0 ? `<div style="font-size: 11px; color: var(--text-secondary);">+ ${shipping.toFixed(2)} € port</div>` : '<div style="font-size: 11px; color: var(--accent-green);">Port gratuit</div>'}
-                    </td>
-                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${title}">${title}</td>
-                    <td class="mono" style="font-size: 12px; color: var(--text-secondary);">${listingDate}</td>
-                    <td>
-                        ${url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-ghost" style="padding: 4px 8px; font-size: 12px;">Voir</a>` : '—'}
-                    </td>
-                </tr>`;
-            }
-
-            html += '</tbody></table>';
-            container.innerHTML = html;
-        })
-        .catch(() => {});
-})();
-</script>
-{% endif %}
-
-{% if snapshots %}
-<div class="card" style="padding: 0; overflow: hidden;">
-    <div style="padding: 24px 24px 0;">
-        <h2>Historique des snapshots</h2>
-    </div>
-    <div style="overflow-x: auto;">
-        <table>
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Ann.</th>
-                    <th>p10</th>
-                    <th>p20</th>
-                    <th>p50</th>
-                    <th>p80</th>
-                    <th>p90</th>
-                    <th>Disp.</th>
-                    <th>CV</th>
-                    <th>Âge méd.</th>
-                    <th>Cons.</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for snap in snapshots %}
-                <tr>
-                    <td class="mono">{{ snap.as_of_date }}</td>
-                    <td>{{ snap.active_count or '—' }}</td>
-                    <td class="price" style="font-size: 12px;">{{ "%.2f"|format(snap.p10) if snap.p10 else '—' }}</td>
-                    <td class="price" style="font-weight: 600;">{{ "%.2f"|format(snap.p20) if snap.p20 else '—' }}</td>
-                    <td class="price">{{ "%.2f"|format(snap.p50) if snap.p50 else '—' }}</td>
-                    <td class="price">{{ "%.2f"|format(snap.p80) if snap.p80 else '—' }}</td>
-                    <td class="price" style="font-size: 12px;">{{ "%.2f"|format(snap.p90) if snap.p90 else '—' }}</td>
-                    <td><span class="{% if snap.dispersion and snap.dispersion > 4 %}badge badge-low{% endif %}">{{ "%.2f"|format(snap.dispersion) if snap.dispersion else '—' }}</span></td>
-                    <td style="font-size: 12px;">{{ "%.0f%%"|format(snap.cv * 100) if snap.cv else '—' }}</td>
-                    <td><span class="{% if snap.age_median_days and snap.age_median_days > 30 %}badge badge-low{% endif %}">{{ "%.0fj"|format(snap.age_median_days) if snap.age_median_days else '—' }}</span></td>
-                    <td><span class="{% if snap.consensus_score and snap.consensus_score >= 70 %}badge badge-ok{% elif snap.consensus_score and snap.consensus_score < 50 %}badge badge-low{% endif %}">{{ "%.0f%%"|format(snap.consensus_score) if snap.consensus_score else '—' }}</span></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endif %}
-
 {% endblock %}

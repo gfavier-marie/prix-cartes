@@ -17,3 +17,19 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3003:3000"
+    volumes:
+      - ./data:/data:ro
+      - metabase-data:/metabase-data
+    environment:
+      - TZ=Europe/Paris
+      - MB_DB_FILE=/metabase-data/metabase.db
+
+volumes:
+  metabase-data:

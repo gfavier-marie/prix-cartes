@@ -5,7 +5,7 @@ Permet de suivre le nombre d'appels quotidiens et de les comparer a la limite.
 
 import json
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -15,6 +15,23 @@ from ..config import get_config
 
 # Fichier cache pour les rate limits eBay
 RATE_LIMITS_CACHE_FILE = os.path.join(os.path.dirname(__file__), "../../data/ebay_rate_limits.json")
+
+# Heure de reset de l'API eBay (9h du matin heure locale)
+EBAY_RESET_HOUR = 9
+
+
+def get_ebay_api_date() -> date:
+    """
+    Retourne la date "API eBay" actuelle.
+
+    eBay réinitialise son compteur à 9h du matin.
+    Avant 9h, on considère qu'on est toujours sur le jour précédent.
+    """
+    now = datetime.now()
+    if now.hour < EBAY_RESET_HOUR:
+        # Avant 9h, on est encore sur le "jour API" précédent
+        return (now - timedelta(days=1)).date()
+    return now.date()
 
 
 class EbayUsageTracker:
@@ -32,12 +49,12 @@ class EbayUsageTracker:
         self.daily_limit = daily_limit or get_config().ebay.daily_limit
 
     def _get_or_create_today(self) -> ApiUsage:
-        """Recupere ou cree l'enregistrement du jour."""
-        today = date.today()
+        """Recupere ou cree l'enregistrement du jour API eBay (reset à 9h)."""
+        api_date = get_ebay_api_date()
 
         usage = self.session.query(ApiUsage).filter(
             ApiUsage.api_name == self.API_NAME,
-            ApiUsage.usage_date == today
+            ApiUsage.usage_date == api_date
         ).first()
 
         if not usage:
@@ -88,7 +105,7 @@ class EbayUsageTracker:
 
     def get_history(self, days: int = 7) -> list[ApiUsage]:
         """
-        Retourne l'historique des derniers jours.
+        Retourne l'historique des derniers jours API.
 
         Args:
             days: Nombre de jours d'historique
@@ -96,9 +113,7 @@ class EbayUsageTracker:
         Returns:
             Liste des enregistrements ApiUsage
         """
-        from datetime import timedelta
-
-        start_date = date.today() - timedelta(days=days - 1)
+        start_date = get_ebay_api_date() - timedelta(days=days - 1)
 
         return self.session.query(ApiUsage).filter(
             ApiUsage.api_name == self.API_NAME,

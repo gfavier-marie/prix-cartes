@@ -3,70 +3,89 @@
 {% block title %}Import CSV{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Import CSV</h1>
-    <p>Modifier des cartes existantes ou en creer de nouvelles via fichier CSV</p>
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Import CSV</h1>
+    <p class="text-gray-500 dark:text-gray-400 mt-1">Modifier des cartes existantes ou en créer de nouvelles via fichier CSV</p>
 </div>
 
-<div class="info-grid">
-    <div class="card">
-        <h2>Importer un fichier</h2>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Formulaire d'import -->
+    <div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Importer un fichier</h2>
 
-        <form id="import-form" enctype="multipart/form-data">
-            <div class="form-group">
-                <label for="csv-file">Fichier CSV (separateur: point-virgule)</label>
-                <input type="file" id="csv-file" name="file" accept=".csv" required>
+        <form id="import-form" enctype="multipart/form-data" class="space-y-4">
+            <div>
+                <label for="csv-file" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Fichier CSV (séparateur: point-virgule)
+                </label>
+                <input type="file" id="csv-file" name="file" accept=".csv" required
+                    class="block w-full text-sm text-gray-500 dark:text-gray-400
+                           file:mr-4 file:py-2 file:px-4
+                           file:rounded-lg file:border-0
+                           file:text-sm file:font-medium
+                           file:bg-blue-50 file:text-blue-700
+                           dark:file:bg-blue-900/30 dark:file:text-blue-400
+                           hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50
+                           file:cursor-pointer file:transition-colors">
             </div>
-            <button type="submit" class="btn btn-primary" id="submit-btn">Importer</button>
+            <button type="submit" id="submit-btn"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+                Importer
+            </button>
         </form>
 
-        <div id="result" style="margin-top: 20px; display: none;"></div>
+        <div id="result" class="mt-4 hidden"></div>
     </div>
 
-    <div class="card">
-        <h2>Format du fichier</h2>
+    <!-- Documentation -->
+    <div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm p-6">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Format du fichier</h2>
 
-        <p style="color: var(--text-secondary); margin-bottom: 16px;">
-            Le fichier CSV doit utiliser le <strong>point-virgule (;)</strong> comme separateur.
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Le fichier CSV doit utiliser le <strong class="text-gray-900 dark:text-white">point-virgule (;)</strong> comme séparateur.
         </p>
 
-        <h3 style="font-size: 14px; margin-bottom: 8px;">Colonnes disponibles :</h3>
-        <table class="info-table" style="margin-bottom: 20px;">
-            <tr><td><code>id</code></td><td>ID numerique ou tcgdex_id (pour modification)</td></tr>
-            <tr><td><code>name</code></td><td>Nom de la carte</td></tr>
-            <tr><td><code>local_id</code></td><td>Numero dans le set (ex: 25, 001, H01)</td></tr>
-            <tr><td><code>set_name</code></td><td>Nom du set (pour affichage)</td></tr>
-            <tr><td><code>set_id</code></td><td>ID du set (pour creation)</td></tr>
-            <tr><td><code>set_cardcount_official</code></td><td>Total officiel du set (ex: H32) - construit card_number_full</td></tr>
-            <tr><td><code>variant</code></td><td>NORMAL, REVERSE, HOLO, FIRST_ED</td></tr>
-            <tr><td><code>card_number_format</code></td><td>Format eBay: LOCAL_ONLY (25), LOCAL_TOTAL (25/102), PROMO (25 promo)</td></tr>
-            <tr><td><code>card_number_padded</code></td><td>true/false - Padding zeros: 1/92 devient 001/092</td></tr>
-            <tr><td><code>ebay_query</code></td><td>Requete eBay personnalisee (override)</td></tr>
-        </table>
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Colonnes disponibles :</h3>
+        <div class="overflow-x-auto mb-4">
+            <table class="w-full text-sm">
+                <tbody class="divide-y divide-gray-200 dark:divide-dark-600">
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">id</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">ID numérique ou tcgdex_id (pour modification)</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">name</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">Nom de la carte</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">local_id</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">Numéro dans le set (ex: 25, 001, H01)</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">set_name</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">Nom du set (pour affichage)</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">set_id</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">ID du set (pour création)</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">set_cardcount_official</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">Total officiel du set (ex: H32)</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">variant</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">NORMAL, REVERSE, HOLO, FIRST_ED</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">card_number_format</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">LOCAL_ONLY, LOCAL_TOTAL, PROMO</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">card_number_padded</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">true/false - Padding zeros</td></tr>
+                    <tr><td class="py-1.5 font-mono text-blue-600 dark:text-blue-400">ebay_query</td><td class="py-1.5 text-gray-600 dark:text-gray-400 pl-3">Requête eBay personnalisée</td></tr>
+                </tbody>
+            </table>
+        </div>
 
-        <h3 style="font-size: 14px; margin-bottom: 8px;">Mode modification (id renseigne) :</h3>
-        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_name;set_cardcount_official;card_number_format;card_number_padded;ebay_query
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mode modification (id renseigné) :</h3>
+        <pre class="p-3 bg-gray-50 dark:bg-dark-600 rounded-lg text-xs font-mono text-gray-700 dark:text-gray-300 overflow-x-auto mb-4">id;name;local_id;set_name;set_cardcount_official;card_number_format;card_number_padded;ebay_query
 123;Pikachu;25;;;;;
 456;Dracaufeu;4;Set de Base;;;;Dracaufeu 4/102 pokemon
 ecard2-H01-HOLO;;H01;;H32;LOCAL_ONLY;;
-svp-001-NORMAL;;;;;PROMO;true;</div>
-        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 16px;">
-            <code>set_cardcount_official</code> construit card_number_full_override (ex: H01 + H32 = H01/H32)
-        </p>
+svp-001-NORMAL;;;;;PROMO;true;</pre>
 
-        <h3 style="font-size: 14px; margin-bottom: 8px;">Mode creation (id vide) :</h3>
-        <div class="code-block" style="margin-bottom: 16px;">id;name;local_id;set_id;variant;card_number_format;card_number_padded;ebay_query
+        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Mode création (id vide) :</h3>
+        <pre class="p-3 bg-gray-50 dark:bg-dark-600 rounded-lg text-xs font-mono text-gray-700 dark:text-gray-300 overflow-x-auto mb-4">id;name;local_id;set_id;variant;card_number_format;card_number_padded;ebay_query
 ;Ma Carte;001;sv08;NORMAL;LOCAL_TOTAL;;
 ;Carte Promo;002;svp;NORMAL;PROMO;true;
-;Autre Carte;003;sv08;REVERSE;;;Ma requete eBay custom</div>
+;Autre Carte;003;sv08;REVERSE;;;Ma requete eBay custom</pre>
 
-        <p style="color: var(--text-secondary); font-size: 13px;">
-            Pour trouver les <code>set_id</code> valides,
-            <a href="{{ url_for('export_sets_reference') }}" class="link">telecharger la reference des sets</a>.
+        <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Pour trouver les <code class="px-1 py-0.5 bg-gray-100 dark:bg-dark-600 rounded text-xs font-mono">set_id</code> valides,
+            <a href="{{ url_for('export_sets_reference') }}" class="text-blue-600 dark:text-blue-400 hover:underline">télécharger la référence des sets</a>.
         </p>
 
-        <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-            <a href="{{ url_for('export_import_template') }}" class="btn btn-ghost">Telecharger le modele CSV</a>
+        <div class="pt-4 border-t border-gray-200 dark:border-dark-600">
+            <a href="{{ url_for('export_import_template') }}"
+               class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-dark-500 text-sm font-medium rounded-lg text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-600 hover:bg-gray-50 dark:hover:bg-dark-500 transition-colors">
+                Télécharger le modèle CSV
+            </a>
         </div>
     </div>
 </div>
@@ -80,7 +99,7 @@ document.getElementById('import-form').addEventListener('submit', async function
     const resultDiv = document.getElementById('result');
 
     if (!fileInput.files.length) {
-        alert('Veuillez selectionner un fichier');
+        showToast('Veuillez sélectionner un fichier', 'error');
         return;
     }
 
@@ -89,7 +108,7 @@ document.getElementById('import-form').addEventListener('submit', async function
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Import en cours...';
-    resultDiv.style.display = 'none';
+    resultDiv.classList.add('hidden');
 
     try {
         const response = await fetch('/api/cards/import-csv', {
@@ -101,19 +120,15 @@ document.getElementById('import-form').addEventListener('submit', async function
 
         let html = '';
         if (data.success) {
-            html = `
-                <div class="flash success">
-                    ${data.message}
-                </div>
-            `;
+            html = `<div class="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400">${data.message}</div>`;
 
             if (data.details && data.details.length > 0) {
                 html += `
-                    <details style="margin-top: 12px;">
-                        <summary style="cursor: pointer; color: var(--accent-green);">
-                            Details (${data.details.length})
+                    <details class="mt-3">
+                        <summary class="cursor-pointer text-sm text-green-600 dark:text-green-400 hover:underline">
+                            Détails (${data.details.length})
                         </summary>
-                        <ul style="margin-top: 8px; padding-left: 20px; color: var(--text-secondary); font-size: 13px;">
+                        <ul class="mt-2 pl-5 text-sm text-gray-600 dark:text-gray-400 space-y-1 list-disc">
                             ${data.details.map(d => `<li>${d}</li>`).join('')}
                         </ul>
                     </details>
@@ -122,34 +137,26 @@ document.getElementById('import-form').addEventListener('submit', async function
 
             if (data.errors && data.errors.length > 0) {
                 html += `
-                    <details style="margin-top: 12px;">
-                        <summary style="cursor: pointer; color: var(--accent-yellow);">
+                    <details class="mt-3">
+                        <summary class="cursor-pointer text-sm text-yellow-600 dark:text-yellow-400 hover:underline">
                             Avertissements (${data.errors.length})
                         </summary>
-                        <ul style="margin-top: 8px; padding-left: 20px; color: var(--accent-yellow); font-size: 13px;">
+                        <ul class="mt-2 pl-5 text-sm text-yellow-600 dark:text-yellow-400 space-y-1 list-disc">
                             ${data.errors.map(e => `<li>${e}</li>`).join('')}
                         </ul>
                     </details>
                 `;
             }
         } else {
-            html = `
-                <div class="flash error">
-                    Erreur: ${data.error}
-                </div>
-            `;
+            html = `<div class="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">Erreur: ${data.error}</div>`;
         }
 
         resultDiv.innerHTML = html;
-        resultDiv.style.display = 'block';
+        resultDiv.classList.remove('hidden');
 
     } catch (error) {
-        resultDiv.innerHTML = `
-            <div class="flash error">
-                Erreur reseau: ${error.message}
-            </div>
-        `;
-        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `<div class="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">Erreur réseau: ${error.message}</div>`;
+        resultDiv.classList.remove('hidden');
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Importer';

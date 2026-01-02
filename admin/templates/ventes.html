@@ -1,150 +1,171 @@
 {% extends "base.html" %}
 
-{% block title %}Ventes detectees{% endblock %}
+{% block title %}Ventes détectées{% endblock %}
 
 {% block content %}
 {% set filter_params = "date_from=" ~ date_from ~ "&date_to=" ~ date_to ~ "&period=" ~ period %}
-<div class="page-header">
-    <h1>Ventes detectees</h1>
-    <p>Annonces eBay disparues entre deux snapshots (probablement vendues)</p>
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Ventes détectées</h1>
+    <p class="text-gray-500 dark:text-gray-400 mt-1">Annonces eBay disparues entre deux snapshots (probablement vendues)</p>
 </div>
 
 <!-- Filtres -->
-<form class="filters" method="GET" style="margin-bottom: 20px;">
-    <div class="filter-group">
-        <label>Periode</label>
-        <select name="period" onchange="toggleDateInputs()">
-            <option value="">Toutes</option>
-            <option value="7d" {% if period == '7d' %}selected{% endif %}>7 derniers jours</option>
-            <option value="30d" {% if period == '30d' %}selected{% endif %}>30 derniers jours</option>
-            <option value="90d" {% if period == '90d' %}selected{% endif %}>90 derniers jours</option>
-        </select>
+<form method="GET" class="bg-white dark:bg-dark-700 rounded-lg p-4 mb-6 shadow-sm">
+    <div class="flex flex-wrap items-end gap-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Période</label>
+            <select name="period" onchange="toggleDateInputs()"
+                class="px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+                <option value="">Toutes</option>
+                <option value="7d" {% if period == '7d' %}selected{% endif %}>7 derniers jours</option>
+                <option value="30d" {% if period == '30d' %}selected{% endif %}>30 derniers jours</option>
+                <option value="90d" {% if period == '90d' %}selected{% endif %}>90 derniers jours</option>
+            </select>
+        </div>
+        <div id="date-from-group" class="{% if period %}hidden{% endif %}">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Du</label>
+            <input type="date" name="date_from" value="{{ date_from }}"
+                class="px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div id="date-to-group" class="{% if period %}hidden{% endif %}">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Au</label>
+            <input type="date" name="date_to" value="{{ date_to }}"
+                class="px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+        </div>
+        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+            Filtrer
+        </button>
+        {% if date_from or date_to or period %}
+        <a href="{{ url_for('sold_listings') }}" class="px-4 py-2 border border-gray-300 dark:border-dark-500 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors">
+            Reset
+        </a>
+        {% endif %}
     </div>
-    <div class="filter-group" id="date-from-group" style="{% if period %}display: none;{% endif %}">
-        <label>Du</label>
-        <input type="date" name="date_from" value="{{ date_from }}">
-    </div>
-    <div class="filter-group" id="date-to-group" style="{% if period %}display: none;{% endif %}">
-        <label>Au</label>
-        <input type="date" name="date_to" value="{{ date_to }}">
-    </div>
-    <button type="submit" class="btn btn-primary">Filtrer</button>
-    {% if date_from or date_to or period %}
-    <a href="{{ url_for('sold_listings') }}" class="btn btn-ghost">Reset</a>
-    {% endif %}
 </form>
 
 <script>
 function toggleDateInputs() {
     const period = document.querySelector('select[name="period"]').value;
-    document.getElementById('date-from-group').style.display = period ? 'none' : '';
-    document.getElementById('date-to-group').style.display = period ? 'none' : '';
+    document.getElementById('date-from-group').classList.toggle('hidden', !!period);
+    document.getElementById('date-to-group').classList.toggle('hidden', !!period);
 }
 </script>
 
-<div class="stats-grid">
-    <div class="stat-box accent-green">
-        <div class="stat-value">{{ stats.total }}</div>
-        <div class="stat-label">Ventes {% if period or date_from or date_to %}(filtrees){% endif %}</div>
+<!-- Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+    <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+        <p class="text-xs text-green-600 dark:text-green-400 uppercase font-medium">Ventes {% if period or date_from or date_to %}(filtrées){% endif %}</p>
+        <p class="text-3xl font-bold text-green-700 dark:text-green-400 mt-1">{{ stats.total }}</p>
     </div>
-    <div class="stat-box accent-blue">
-        <div class="stat-value">{{ "%.2f"|format(stats.total_value) }} EUR</div>
-        <div class="stat-label">Valeur totale</div>
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <p class="text-xs text-blue-600 dark:text-blue-400 uppercase font-medium">Valeur totale</p>
+        <p class="text-3xl font-bold text-blue-700 dark:text-blue-400 mt-1">{{ "%.2f"|format(stats.total_value) }} €</p>
     </div>
 </div>
 
-<div class="card">
+<!-- Liste des ventes -->
+<div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm overflow-hidden">
     {% if listings %}
-    <table>
-        <thead>
-            <tr>
-                <th>Image</th>
-                <th>Carte</th>
-                <th>Annonce eBay</th>
-                <th>Prix</th>
-                <th>Vendeur</th>
-                <th>Date vente</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for sold, card in listings %}
-            <tr>
-                <td>
-                    {% if sold.image_url %}
-                    <img src="{{ sold.image_url }}" alt="" style="height: 50px; border-radius: 4px;">
-                    {% else %}
-                    <img src="{{ card.image_url }}" alt="" style="height: 50px; border-radius: 4px;">
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="card-name">
-                        <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link">{{ card.name }}</a>
-                    </div>
-                    <div class="card-meta">
-                        {{ card.set_name }} - {{ card.local_id }}
-                        {% if sold.is_reverse %}<span class="badge badge-low" style="margin-left: 4px;">REVERSE</span>{% endif %}
-                    </div>
-                </td>
-                <td>
-                    <div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ sold.title }}">
-                        {{ sold.title or '-' }}
-                    </div>
-                    <div class="card-meta">{{ sold.condition or '-' }}</div>
-                </td>
-                <td>
-                    <span class="price" style="color: var(--accent-green);">{{ "%.2f"|format(sold.price or 0) }} EUR</span>
-                    {% if sold.effective_price and sold.price and sold.effective_price != sold.price %}
-                    <div class="card-meta">+ {{ "%.2f"|format(sold.effective_price - sold.price) }} EUR port</div>
-                    {% elif not sold.price and sold.effective_price %}
-                    <span class="price" style="color: var(--accent-green);">{{ "%.2f"|format(sold.effective_price) }} EUR</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <span class="text-secondary">{{ sold.seller or '-' }}</span>
-                </td>
-                <td>
-                    <span class="text-secondary">{{ sold.detected_sold_at.strftime('%d/%m/%Y') }}</span>
-                    {% if sold.listing_date %}
-                    <div class="card-meta">Mise en ligne: {{ sold.listing_date[:10] if sold.listing_date is string else sold.listing_date.strftime('%d/%m/%Y') }}</div>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="actions">
-                        {% if sold.url %}
-                        <a href="{{ sold.url }}" target="_blank" class="btn btn-ghost btn-sm">eBay</a>
+    <div class="overflow-x-auto">
+        <table class="w-full min-w-[900px]">
+            <thead class="bg-gray-50 dark:bg-dark-600">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Image</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Carte</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Annonce eBay</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Prix</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Vendeur</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date vente</th>
+                    <th class="px-4 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-dark-600">
+                {% for sold, card in listings %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-dark-600/50">
+                    <td class="px-4 py-3">
+                        {% if sold.image_url %}
+                        <img src="{{ sold.image_url }}" alt="" class="h-12 rounded">
+                        {% elif card.image_url %}
+                        <img src="{{ card.image_url }}" alt="" class="h-12 rounded">
+                        {% else %}
+                        <div class="h-12 w-9 bg-gray-200 dark:bg-dark-600 rounded flex items-center justify-center">
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
                         {% endif %}
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    </td>
+                    <td class="px-4 py-3">
+                        <a href="{{ url_for('card_detail', card_id=card.id) }}" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{{ card.name }}</a>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                            {{ card.set_name }} - {{ card.local_id }}
+                            {% if sold.is_reverse %}
+                            <span class="ml-1 px-1.5 py-0.5 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded">REVERSE</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="max-w-xs truncate text-sm text-gray-900 dark:text-white" title="{{ sold.title }}">
+                            {{ sold.title or '—' }}
+                        </div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400">{{ sold.condition or '—' }}</div>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        <span class="text-green-600 dark:text-green-400 font-medium font-mono">{{ "%.2f"|format(sold.price or 0) }} €</span>
+                        {% if sold.effective_price and sold.price and sold.effective_price != sold.price %}
+                        <div class="text-xs text-gray-500 dark:text-gray-400">+ {{ "%.2f"|format(sold.effective_price - sold.price) }} € port</div>
+                        {% elif not sold.price and sold.effective_price %}
+                        <span class="text-green-600 dark:text-green-400 font-medium font-mono">{{ "%.2f"|format(sold.effective_price) }} €</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ sold.seller or '—' }}</td>
+                    <td class="px-4 py-3">
+                        <span class="text-sm text-gray-900 dark:text-white">{{ sold.detected_sold_at.strftime('%d/%m/%Y') }}</span>
+                        {% if sold.listing_date %}
+                        <div class="text-xs text-gray-500 dark:text-gray-400">Mise en ligne: {{ sold.listing_date[:10] if sold.listing_date is string else sold.listing_date.strftime('%d/%m/%Y') }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if sold.url %}
+                        <a href="{{ sold.url }}" target="_blank" class="px-3 py-1.5 text-xs font-medium border border-gray-300 dark:border-dark-500 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors">
+                            eBay
+                        </a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     {% if total_pages > 1 %}
-    <div class="pagination">
+    <div class="flex items-center justify-center gap-1 p-4 border-t border-gray-200 dark:border-dark-600">
         {% if page > 1 %}
-        <a href="?page={{ page - 1 }}&{{ filter_params }}">←</a>
+        <a href="?page={{ page - 1 }}&{{ filter_params }}" class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-600 rounded">←</a>
         {% endif %}
 
         {% for p in range(1, total_pages + 1) %}
             {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
-                <a href="?page={{ p }}&{{ filter_params }}" class="{% if p == page %}active{% endif %}">{{ p }}</a>
+                <a href="?page={{ p }}&{{ filter_params }}"
+                   class="px-3 py-2 text-sm rounded {% if p == page %}bg-blue-600 text-white{% else %}text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-600{% endif %}">{{ p }}</a>
             {% elif p == page - 3 or p == page + 3 %}
-                <span style="color: var(--text-muted); padding: 0 8px;">...</span>
+                <span class="px-2 text-gray-400">...</span>
             {% endif %}
         {% endfor %}
 
         {% if page < total_pages %}
-        <a href="?page={{ page + 1 }}&{{ filter_params }}">→</a>
+        <a href="?page={{ page + 1 }}&{{ filter_params }}" class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-600 rounded">→</a>
         {% endif %}
     </div>
     {% endif %}
 
     {% else %}
-    <div class="empty-state">
-        <p>Aucune vente detectee pour le moment.</p>
-        <p class="text-muted" style="margin-top: 8px;">Les ventes seront detectees lors du prochain batch.</p>
+    <div class="p-12 text-center text-gray-500 dark:text-gray-400">
+        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path>
+        </svg>
+        <p class="mb-2">Aucune vente détectée pour le moment.</p>
+        <p class="text-sm">Les ventes seront détectées lors du prochain batch.</p>
     </div>
     {% endif %}
 </div>

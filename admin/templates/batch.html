@@ -3,573 +3,289 @@
 {% block title %}Lancer batch{% endblock %}
 
 {% block content %}
-<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+<!-- Page Header -->
+<div class="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
     <div>
-        <h1>Lancer un batch</h1>
-        <p>Selectionnez une ou plusieurs series pour lancer la collecte des donnees</p>
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Lancer un batch</h1>
+        <p class="mt-1 text-gray-500 dark:text-gray-400">Selectionnez une ou plusieurs series pour lancer la collecte</p>
     </div>
-    <button id="refresh-stats-btn" class="btn btn-ghost" onclick="refreshStats()">Actualiser</button>
+    <button id="refresh-stats-btn" onclick="refreshStats()" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-dark-500 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-600">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        Actualiser
+    </button>
 </div>
 
-<!-- Auto-launch button -->
-<div class="card" style="display: flex; justify-content: space-between; align-items: center;">
-    <div>
-        <strong>Lancement automatique</strong>
-        <p class="text-secondary" style="margin: 4px 0 0; font-size: 13px;">Lance les sets jamais traites ou les plus anciens</p>
-    </div>
-    <div style="display: flex; gap: 8px; align-items: center;">
-        <select id="auto-limit" style="padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-secondary);">
-            <option value="5">5 sets</option>
-            <option value="10" selected>10 sets</option>
-            <option value="20">20 sets</option>
-            <option value="50">50 sets</option>
-        </select>
-        <select id="auto-workers" style="padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-secondary);">
-            <option value="1">1 worker</option>
-            <option value="2">2 workers</option>
-            <option value="3" selected>3 workers</option>
-            <option value="5">5 workers</option>
-            <option value="10">10 workers</option>
-        </select>
-        <button id="auto-launch-btn" class="btn btn-primary">Lancer auto</button>
-    </div>
-</div>
-
-<!-- Queue status banner -->
-<div id="queue-status" class="card" style="display: none;">
-    <div class="card-header">
-        <h2>Queue de batchs</h2>
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <span class="badge badge-low" id="status-badge">En cours...</span>
-            <button id="stop-batch-btn" class="btn btn-sm" style="background: var(--accent-red); color: white;">Tout arreter</button>
-        </div>
-    </div>
-    <div id="queue-content">
-        <p>Chargement...</p>
-    </div>
-</div>
-
-<!-- Selection bar -->
-<div id="selection-bar" class="card" style="display: none; position: sticky; top: 0; z-index: 100; background: var(--bg-primary);">
-    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+<!-- Auto-launch -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-4 sm:p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <strong id="selection-count">0</strong> set(s) selectionne(s)
-            <span id="estimate-info" class="text-secondary" style="margin-left: 12px; font-size: 13px;"></span>
+            <h3 class="font-semibold text-gray-900 dark:text-white">Lancement automatique</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Lance les sets jamais traites ou les plus anciens</p>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-            <select id="selection-workers" style="padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border-subtle); background: var(--bg-secondary);">
+        <div class="flex flex-wrap gap-2 items-center">
+            <select id="auto-limit" class="px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white">
+                <option value="5">5 sets</option>
+                <option value="10" selected>10 sets</option>
+                <option value="20">20 sets</option>
+                <option value="50">50 sets</option>
+            </select>
+            <select id="auto-workers" class="px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white">
                 <option value="1">1 worker</option>
                 <option value="2">2 workers</option>
                 <option value="3" selected>3 workers</option>
                 <option value="5">5 workers</option>
-                <option value="10">10 workers</option>
             </select>
-            <button id="clear-selection-btn" class="btn btn-ghost btn-sm">Effacer</button>
-            <button id="launch-queue-btn" class="btn btn-primary">Lancer la queue</button>
+            <button id="auto-launch-btn" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Lancer auto
+            </button>
         </div>
     </div>
 </div>
 
-<!-- Series list -->
-{% for serie in series_sets %}
-<div class="card">
-    <div class="card-header" style="cursor: pointer;" onclick="toggleSerie('{{ serie.serie_id }}')">
-        <h2 style="display: flex; align-items: center; gap: 12px;">
-            <span class="toggle-icon" id="icon-{{ serie.serie_id }}">+</span>
-            {{ serie.serie_name }}
-            <span class="badge badge-disabled">{{ serie.sets|length }} sets</span>
-        </h2>
-        <button class="btn btn-ghost btn-sm select-all-btn" data-serie="{{ serie.serie_id }}" onclick="event.stopPropagation(); selectAllSerie('{{ serie.serie_id }}')">
-            Selectionner tout
-        </button>
+<!-- Queue Status -->
+<div id="queue-status" class="hidden bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-4 sm:p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Queue de batchs</h2>
+        <div class="flex items-center gap-3">
+            <span id="status-badge" class="inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">En cours...</span>
+            <button id="stop-batch-btn" class="inline-flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-colors">Tout arreter</button>
+        </div>
     </div>
-    <div id="sets-{{ serie.serie_id }}" class="sets-container" style="display: none;">
-        <table>
-            <thead>
-                <tr>
-                    <th style="width: 40px;"></th>
-                    <th>Set</th>
-                    <th>Dernier maj</th>
-                    <th class="text-right">Progression</th>
-                </tr>
-            </thead>
-            <tbody>
+    <div id="queue-content" class="text-gray-500 dark:text-gray-400">Chargement...</div>
+</div>
+
+<!-- Selection Bar (sticky) -->
+<div id="selection-bar" class="hidden sticky top-16 z-40 bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-4 mb-6 shadow-lg">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex items-center gap-4 flex-wrap">
+            <span class="font-medium text-gray-900 dark:text-white"><span id="selection-count">0</span> set(s)</span>
+            <span id="estimate-info" class="text-sm text-gray-500 dark:text-gray-400"></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <select id="selection-workers" class="px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white">
+                <option value="1">1 worker</option>
+                <option value="2">2 workers</option>
+                <option value="3" selected>3 workers</option>
+                <option value="5">5 workers</option>
+            </select>
+            <button id="clear-selection-btn" class="px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Effacer</button>
+            <button id="launch-queue-btn" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">Lancer</button>
+        </div>
+    </div>
+</div>
+
+<!-- Series List -->
+{% for serie in series_sets %}
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 mb-4 overflow-hidden">
+    <div class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors" onclick="toggleSerie('{{ serie.serie_id }}')">
+        <div class="flex items-center gap-3">
+            <span id="icon-{{ serie.serie_id }}" class="w-6 h-6 flex items-center justify-center bg-gray-100 dark:bg-dark-500 rounded text-sm font-bold text-gray-500 dark:text-gray-400">+</span>
+            <h3 class="font-semibold text-gray-900 dark:text-white">{{ serie.serie_name }}</h3>
+            <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-dark-500 text-gray-600 dark:text-gray-300">{{ serie.sets|length }} sets</span>
+        </div>
+        <button class="px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" onclick="event.stopPropagation(); selectAllSerie('{{ serie.serie_id }}')">Tout selectionner</button>
+    </div>
+    <div id="sets-{{ serie.serie_id }}" class="hidden border-t border-gray-200 dark:border-dark-500">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[500px]">
+                <thead><tr class="bg-gray-50 dark:bg-dark-600">
+                    <th class="w-10 px-4 py-2"></th>
+                    <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Set</th>
+                    <th class="px-4 py-2 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Dernier maj</th>
+                    <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Progression</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-100 dark:divide-dark-500">
                 {% for set in serie.sets %}
-                <tr>
-                    <td>
-                        <input type="checkbox" class="set-checkbox" data-set-id="{{ set.id }}" data-set-name="{{ set.name }}" data-serie="{{ serie.serie_id }}">
+                <tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
+                    <td class="px-4 py-3"><input type="checkbox" class="set-checkbox w-4 h-4 rounded border-gray-300 dark:border-dark-500 text-blue-600 focus:ring-blue-500" data-set-id="{{ set.id }}" data-set-name="{{ set.name }}" data-serie="{{ serie.serie_id }}"></td>
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-gray-900 dark:text-white">{{ set.name }}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 font-mono">{{ set.id }}</div>
                     </td>
-                    <td>
-                        <div class="card-name">{{ set.name }}</div>
-                        <div class="card-meta mono">{{ set.id }}</div>
-                    </td>
-                    <td class="set-last-snapshot" data-set-id="{{ set.id }}">{{ set.last_snapshot.strftime('%d/%m/%y') if set.last_snapshot else '-' }}</td>
-                    <td class="text-right set-progress" data-set-id="{{ set.id }}">
+                    <td class="px-4 py-3 text-center text-sm text-gray-500 dark:text-gray-400 set-last-snapshot" data-set-id="{{ set.id }}">{{ set.last_snapshot.strftime('%d/%m/%y') if set.last_snapshot else '-' }}</td>
+                    <td class="px-4 py-3 text-right set-progress" data-set-id="{{ set.id }}">
                         {% if set.card_count > 0 %}
-                            {% set pct = (set.price_count / set.card_count * 100)|round(0)|int %}
-                            {% set error_pct = (set.error_count / set.card_count * 100)|round(0)|int if set.error_count else 0 %}
-                            <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
-                                <span class="mono set-counts">{{ set.price_count }}/{{ set.card_count }}</span>
-                                <div style="width: 60px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
-                                    <div class="set-bar" style="width: {{ pct }}%; height: 100%; background: {{ 'var(--accent-green)' if pct == 100 else 'var(--accent-blue)' }};"></div>
-                                </div>
-                                <span class="mono set-pct" style="width: 40px;">{{ pct }}%</span>
+                        {% set pct = (set.price_count / set.card_count * 100)|round(0)|int %}
+                        {% set error_pct = (set.error_count / set.card_count * 100)|round(0)|int if set.error_count else 0 %}
+                        <div class="flex items-center justify-end gap-2">
+                            <span class="text-xs font-mono text-gray-600 dark:text-gray-400">{{ set.price_count }}/{{ set.card_count }}</span>
+                            <div class="w-16 h-1.5 bg-gray-200 dark:bg-dark-500 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full {% if pct == 100 %}bg-green-500{% else %}bg-blue-500{% endif %}" style="width: {{ pct }}%"></div>
                             </div>
-                            {% if set.error_count > 0 %}
-                            <div class="set-errors" style="font-size: 11px; color: var(--accent-red); margin-top: 2px;">{{ set.error_count }} err ({{ error_pct }}%)</div>
-                            {% endif %}
-                        {% else %}
-                            -
+                            <span class="text-xs font-mono w-8 text-right {% if pct == 100 %}text-green-600 dark:text-green-400{% else %}text-gray-600 dark:text-gray-400{% endif %}">{{ pct }}%</span>
+                        </div>
+                        {% if set.error_count > 0 %}
+                        <div class="text-[10px] text-red-500 mt-0.5">{{ set.error_count }} err</div>
                         {% endif %}
+                        {% else %}-{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endfor %}
+{% endblock %}
 
-<style>
-    .toggle-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 24px;
-        height: 24px;
-        background: var(--bg-secondary);
-        border-radius: 4px;
-        font-size: 14px;
-        font-weight: bold;
-        color: var(--text-secondary);
-    }
-
-    .sets-container table {
-        margin-top: 16px;
-    }
-
-    .set-checkbox {
-        width: 18px;
-        height: 18px;
-        cursor: pointer;
-    }
-
-    .queue-item {
-        padding: 8px 12px;
-        margin: 4px 0;
-        border-radius: 4px;
-        background: var(--bg-secondary);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .queue-item.running {
-        background: rgba(59, 130, 246, 0.2);
-        border-left: 3px solid var(--accent-blue);
-    }
-
-    .queue-item.completed {
-        background: rgba(34, 197, 94, 0.2);
-    }
-
-    .queue-item.failed {
-        background: rgba(239, 68, 68, 0.2);
-    }
-</style>
-
+{% block scripts %}
 <script>
-    const selectedSets = new Set();
-    let estimateTimeout = null;
+const selectedSets = new Set();
+let estimateTimeout = null;
+let statusInterval = null;
+let hasStartedProcessing = false;
 
-    function toggleSerie(serieId) {
-        const container = document.getElementById('sets-' + serieId);
-        const icon = document.getElementById('icon-' + serieId);
+function toggleSerie(serieId) {
+    const container = document.getElementById('sets-' + serieId);
+    const icon = document.getElementById('icon-' + serieId);
+    const isHidden = container.classList.contains('hidden');
+    container.classList.toggle('hidden');
+    icon.textContent = isHidden ? '-' : '+';
+}
 
-        if (container.style.display === 'none') {
-            container.style.display = 'block';
-            icon.textContent = '-';
-        } else {
-            container.style.display = 'none';
-            icon.textContent = '+';
-        }
-    }
+function selectAllSerie(serieId) {
+    const checkboxes = document.querySelectorAll(`.set-checkbox[data-serie="${serieId}"]`);
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    checkboxes.forEach(cb => { cb.checked = !allChecked; updateSelection(cb); });
+}
 
-    function selectAllSerie(serieId) {
-        const checkboxes = document.querySelectorAll(`.set-checkbox[data-serie="${serieId}"]`);
-        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+function updateSelection(checkbox) {
+    const setId = checkbox.dataset.setId;
+    const setName = checkbox.dataset.setName;
+    const key = JSON.stringify({set_id: setId, set_name: setName});
+    checkbox.checked ? selectedSets.add(key) : selectedSets.delete(key);
+    updateSelectionBar();
+}
 
-        checkboxes.forEach(cb => {
-            cb.checked = !allChecked;
-            updateSelection(cb);
-        });
-    }
+function updateSelectionBar() {
+    const bar = document.getElementById('selection-bar');
+    document.getElementById('selection-count').textContent = selectedSets.size;
+    bar.classList.toggle('hidden', selectedSets.size === 0);
+    if (estimateTimeout) clearTimeout(estimateTimeout);
+    if (selectedSets.size > 0) { estimateTimeout = setTimeout(updateEstimate, 300); }
+    else { document.getElementById('estimate-info').textContent = ''; }
+}
 
-    function updateSelection(checkbox) {
-        const setId = checkbox.dataset.setId;
-        const setName = checkbox.dataset.setName;
+async function updateEstimate() {
+    const setIds = Array.from(selectedSets).map(s => JSON.parse(s).set_id);
+    if (setIds.length === 0) return;
+    try {
+        const response = await fetch('/api/batch/estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ set_ids: setIds }) });
+        const data = await response.json();
+        const color = data.will_exceed ? 'text-red-500' : '';
+        document.getElementById('estimate-info').innerHTML = `~<strong>${data.total_cards}</strong> cartes / <strong class="${color}">${data.estimated_calls}</strong> API (reste: ${data.remaining})${data.will_exceed ? ' <span class="text-red-500">Depassera!</span>' : ''}`;
+    } catch (e) { console.error(e); }
+}
 
-        if (checkbox.checked) {
-            selectedSets.add(JSON.stringify({set_id: setId, set_name: setName}));
-        } else {
-            selectedSets.delete(JSON.stringify({set_id: setId, set_name: setName}));
-        }
+document.querySelectorAll('.set-checkbox').forEach(cb => cb.addEventListener('change', function() { updateSelection(this); }));
+document.getElementById('clear-selection-btn').addEventListener('click', function() { selectedSets.clear(); document.querySelectorAll('.set-checkbox').forEach(cb => cb.checked = false); updateSelectionBar(); });
 
-        updateSelectionBar();
-    }
+document.getElementById('launch-queue-btn').addEventListener('click', async function() {
+    if (selectedSets.size === 0) return;
+    const sets = Array.from(selectedSets).map(s => JSON.parse(s));
+    const maxWorkers = parseInt(document.getElementById('selection-workers').value);
+    this.disabled = true; this.textContent = 'Ajout...';
+    try {
+        const response = await fetch('/api/batch/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sets, max_workers: maxWorkers }) });
+        if (response.ok) { selectedSets.clear(); document.querySelectorAll('.set-checkbox').forEach(cb => cb.checked = false); updateSelectionBar(); showQueueStatus(); startStatusPolling(); }
+        else { const data = await response.json(); showToast('Erreur: ' + (data.error || 'Erreur'), 'error'); }
+    } catch (error) { showToast('Erreur: ' + error.message, 'error'); }
+    finally { this.disabled = false; this.textContent = 'Lancer'; }
+});
 
-    function updateSelectionBar() {
-        const bar = document.getElementById('selection-bar');
-        const count = document.getElementById('selection-count');
+function showQueueStatus() { document.getElementById('queue-status').classList.remove('hidden'); }
+function hideQueueStatus() { document.getElementById('queue-status').classList.add('hidden'); }
 
-        count.textContent = selectedSets.size;
-        bar.style.display = selectedSets.size > 0 ? 'block' : 'none';
+function startStatusPolling() {
+    if (statusInterval) clearInterval(statusInterval);
+    updateQueueStatus();
+    statusInterval = setInterval(updateQueueStatus, 2000);
+}
 
-        // Debounce: mettre a jour l'estimation
-        if (estimateTimeout) clearTimeout(estimateTimeout);
-        if (selectedSets.size > 0) {
-            estimateTimeout = setTimeout(updateEstimate, 300);
-        } else {
-            document.getElementById('estimate-info').textContent = '';
-        }
-    }
+async function updateQueueStatus() {
+    try {
+        const response = await fetch('/api/batch/status');
+        const data = await response.json();
+        const content = document.getElementById('queue-content');
+        const badge = document.getElementById('status-badge');
+        const stopBtn = document.getElementById('stop-batch-btn');
 
-    async function updateEstimate() {
-        const setIds = Array.from(selectedSets).map(s => JSON.parse(s).set_id);
-        if (setIds.length === 0) return;
-
-        try {
-            const response = await fetch('/api/batch/estimate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ set_ids: setIds })
-            });
-            const data = await response.json();
-
-            const estimateEl = document.getElementById('estimate-info');
-            const willExceed = data.will_exceed;
-            const color = willExceed ? 'var(--accent-red)' : 'var(--text-secondary)';
-
-            estimateEl.innerHTML = `
-                ~<strong>${data.total_cards}</strong> cartes
-                / <strong style="color: ${color}">${data.estimated_calls}</strong> appels API
-                (reste: ${data.remaining} / ${data.daily_limit})
-                ${willExceed ? '<span style="color: var(--accent-red);"> Depassera le quota!</span>' : ''}
-            `;
-        } catch (e) {
-            console.error('Erreur estimation:', e);
-        }
-    }
-
-    // Checkbox event listeners
-    document.querySelectorAll('.set-checkbox').forEach(cb => {
-        cb.addEventListener('change', function() {
-            updateSelection(this);
-        });
-    });
-
-    // Clear selection
-    document.getElementById('clear-selection-btn').addEventListener('click', function() {
-        selectedSets.clear();
-        document.querySelectorAll('.set-checkbox').forEach(cb => cb.checked = false);
-        updateSelectionBar();
-    });
-
-    // Launch queue
-    document.getElementById('launch-queue-btn').addEventListener('click', async function() {
-        if (selectedSets.size === 0) return;
-
-        const sets = Array.from(selectedSets).map(s => JSON.parse(s));
-        const maxWorkers = parseInt(document.getElementById('selection-workers').value);
-
-        this.disabled = true;
-        this.textContent = 'Ajout...';
-
-        try {
-            const response = await fetch('/api/batch/run', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ sets, max_workers: maxWorkers })
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                // Clear selection
-                selectedSets.clear();
-                document.querySelectorAll('.set-checkbox').forEach(cb => cb.checked = false);
-                updateSelectionBar();
-
-                // Show queue status
-                showQueueStatus();
-                startStatusPolling();
-            } else {
-                alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+        if (data.running || data.pending_count > 0) {
+            hasStartedProcessing = true;
+            showQueueStatus();
+            let html = '';
+            if (data.running_items && data.running_items.length > 0) {
+                html += '<p class="text-sm text-gray-500 dark:text-gray-400 mb-2">En cours:</p>';
+                data.running_items.forEach(c => {
+                    const pct = c.cards_targeted > 0 ? Math.round((c.cards_succeeded + c.cards_failed) / c.cards_targeted * 100) : 0;
+                    html += `<div class="p-3 mb-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 flex items-center justify-between">
+                        <div><strong class="text-gray-900 dark:text-white">${c.set_name}</strong> <span class="text-sm text-gray-500">(${c.set_id})</span></div>
+                        <div class="flex items-center gap-3"><span class="text-sm">${c.cards_succeeded}/${c.cards_targeted}</span>
+                        <div class="w-20 h-1.5 bg-gray-200 dark:bg-dark-500 rounded-full overflow-hidden"><div class="h-full bg-blue-500 rounded-full" style="width:${pct}%"></div></div></div></div>`;
+                });
+                badge.textContent = 'En cours (' + data.running_count + '/' + data.max_workers + ')';
+                badge.className = 'inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
             }
-        } catch (error) {
-            alert('Erreur reseau: ' + error.message);
-        } finally {
-            this.disabled = false;
-            this.textContent = 'Lancer la queue';
-        }
-    });
-
-    // Queue status
-    function showQueueStatus() {
-        document.getElementById('queue-status').style.display = 'block';
-    }
-
-    function hideQueueStatus() {
-        document.getElementById('queue-status').style.display = 'none';
-    }
-
-    let statusInterval = null;
-
-    function startStatusPolling() {
-        if (statusInterval) clearInterval(statusInterval);
-
-        updateQueueStatus();
-        statusInterval = setInterval(updateQueueStatus, 2000);
-    }
-
-    let hasStartedProcessing = false;  // Track if we've seen any processing
-
-    async function updateQueueStatus() {
-        try {
-            const response = await fetch('/api/batch/status');
-            const data = await response.json();
-
-            const content = document.getElementById('queue-content');
-            const badge = document.getElementById('status-badge');
-            const stopBtn = document.getElementById('stop-batch-btn');
-
-            if (data.running || data.pending_count > 0) {
-                hasStartedProcessing = true;  // Mark that processing has started
-                showQueueStatus();
-
-                let html = '';
-
-                // Running items (plusieurs possibles avec workers paralleles)
-                if (data.running_items && data.running_items.length > 0) {
-                    const workersInfo = data.max_workers > 1 ? ` (${data.running_count}/${data.max_workers} workers)` : '';
-                    html += `<p style="margin: 0 0 8px; color: var(--text-secondary);">En cours${workersInfo}:</p>`;
-
-                    data.running_items.forEach(c => {
-                        const pct = c.cards_targeted > 0 ? Math.round((c.cards_succeeded + c.cards_failed) / c.cards_targeted * 100) : 0;
-                        html += `
-                            <div class="queue-item running">
-                                <div>
-                                    <strong>${c.set_name}</strong>
-                                    <span class="text-secondary">(${c.set_id})</span>
-                                </div>
-                                <div style="display: flex; align-items: center; gap: 12px;">
-                                    <span>${c.cards_succeeded}/${c.cards_targeted}</span>
-                                    <div style="width: 80px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
-                                        <div style="width: ${pct}%; height: 100%; background: var(--accent-blue);"></div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-
-                    // Calculate overall progress
-                    const totalTargeted = data.running_items.reduce((sum, c) => sum + c.cards_targeted, 0);
-                    const totalDone = data.running_items.reduce((sum, c) => sum + c.cards_succeeded + c.cards_failed, 0);
-                    const overallPct = totalTargeted > 0 ? Math.round(totalDone / totalTargeted * 100) : 0;
-                    badge.textContent = `En cours (${data.running_count}/${data.max_workers})`;
-                }
-
-                // Pending
-                if (data.pending && data.pending.length > 0) {
-                    html += `<p style="margin: 12px 0 8px; color: var(--text-secondary);">En attente (${data.pending_count}):</p>`;
-                    data.pending.forEach((p, i) => {
-                        if (i < 5) { // Show max 5
-                            html += `
-                                <div class="queue-item">
-                                    <div>
-                                        <strong>${p.set_name}</strong>
-                                        <span class="text-secondary">(${p.set_id})</span>
-                                    </div>
-                                    <span class="badge badge-disabled">En attente</span>
-                                </div>
-                            `;
-                        }
-                    });
-                    if (data.pending_count > 5) {
-                        html += `<p class="text-secondary">... et ${data.pending_count - 5} autres</p>`;
-                    }
-                }
-
-                content.innerHTML = html || '<p>Queue vide</p>';
-                stopBtn.style.display = 'inline-block';
-            } else if (hasStartedProcessing) {
-                // Queue finished (only if we actually saw processing)
-                clearInterval(statusInterval);
-                statusInterval = null;
-
-                badge.textContent = 'Termine';
-                badge.className = 'badge badge-ok';
-                stopBtn.style.display = 'none';
-
-                content.innerHTML = `
-                    <p>Queue terminee!</p>
-                    <p>Termine: ${data.completed_count} | Echecs: ${data.failed_count}</p>
-                `;
-
-                // Refresh page after 3s
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000);
-            } else {
-                // No processing ever started, just stop polling
-                clearInterval(statusInterval);
-                statusInterval = null;
-                hideQueueStatus();
+            if (data.pending && data.pending.length > 0) {
+                html += '<p class="text-sm text-gray-500 dark:text-gray-400 mt-4 mb-2">En attente (' + data.pending_count + '):</p>';
+                data.pending.slice(0, 5).forEach(p => { html += `<div class="p-2 mb-1 rounded bg-gray-50 dark:bg-dark-600 text-sm"><strong>${p.set_name}</strong></div>`; });
+                if (data.pending_count > 5) html += `<p class="text-sm text-gray-400">... et ${data.pending_count - 5} autres</p>`;
             }
-        } catch (error) {
-            console.error('Erreur status:', error);
-        }
-    }
+            content.innerHTML = html || '<p class="text-gray-500">Queue vide</p>';
+            stopBtn.style.display = 'inline-flex';
+        } else if (hasStartedProcessing) {
+            clearInterval(statusInterval); statusInterval = null;
+            badge.textContent = 'Termine'; badge.className = 'inline-flex px-2.5 py-0.5 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400';
+            stopBtn.style.display = 'none';
+            content.innerHTML = '<p class="text-green-600 dark:text-green-400">Queue terminee!</p>';
+            setTimeout(() => window.location.reload(), 3000);
+        } else { clearInterval(statusInterval); statusInterval = null; hideQueueStatus(); }
+    } catch (error) { console.error(error); }
+}
 
-    // Stop queue
-    document.getElementById('stop-batch-btn').addEventListener('click', async function() {
-        if (!confirm('Voulez-vous vraiment arreter toute la queue ?')) {
-            return;
-        }
+document.getElementById('stop-batch-btn').addEventListener('click', async function() {
+    if (!confirm('Arreter toute la queue ?')) return;
+    this.disabled = true; this.textContent = 'Arret...';
+    try { await fetch('/api/batch/stop', { method: 'POST' }); this.textContent = 'Arret demande'; } catch (e) { showToast('Erreur', 'error'); this.disabled = false; this.textContent = 'Tout arreter'; }
+});
 
-        this.disabled = true;
-        this.textContent = 'Arret...';
+fetch('/api/batch/status').then(r => r.json()).then(data => { if (data.running || data.pending_count > 0) { hasStartedProcessing = true; showQueueStatus(); startStatusPolling(); } });
 
-        try {
-            const response = await fetch('/api/batch/stop', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-                this.textContent = 'Arret demande';
-            }
-        } catch (error) {
-            alert('Erreur: ' + error.message);
-            this.disabled = false;
-            this.textContent = 'Tout arreter';
-        }
-    });
-
-    // Check initial status (only start polling if queue is active)
-    fetch('/api/batch/status')
-        .then(r => r.json())
-        .then(data => {
-            if (data.running || data.pending_count > 0) {
-                hasStartedProcessing = true;
-                showQueueStatus();
-                startStatusPolling();
+async function refreshStats() {
+    const btn = document.getElementById('refresh-stats-btn');
+    btn.disabled = true; btn.innerHTML = '<svg class="w-4 h-4 spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+    try {
+        const response = await fetch('/api/batch/set-stats');
+        const stats = await response.json();
+        document.querySelectorAll('.set-progress').forEach(cell => {
+            const data = stats[cell.dataset.setId];
+            if (data && data.card_count > 0) {
+                const barClass = data.pct === 100 ? 'bg-green-500' : 'bg-blue-500';
+                const textClass = data.pct === 100 ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-gray-400';
+                cell.innerHTML = `<div class="flex items-center justify-end gap-2"><span class="text-xs font-mono text-gray-600 dark:text-gray-400">${data.price_count}/${data.card_count}</span><div class="w-16 h-1.5 bg-gray-200 dark:bg-dark-500 rounded-full overflow-hidden"><div class="h-full rounded-full ${barClass}" style="width:${data.pct}%"></div></div><span class="text-xs font-mono w-8 text-right ${textClass}">${data.pct}%</span></div>${data.error_count > 0 ? `<div class="text-[10px] text-red-500 mt-0.5">${data.error_count} err</div>` : ''}`;
             }
         });
+        document.querySelectorAll('.set-last-snapshot').forEach(cell => { const data = stats[cell.dataset.setId]; cell.textContent = data?.last_snapshot || '-'; });
+        showToast('Stats actualisees', 'success');
+    } catch (e) { showToast('Erreur', 'error'); }
+    finally { btn.disabled = false; btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Actualiser'; }
+}
 
-    // Refresh stats
-    async function refreshStats() {
-        const btn = document.getElementById('refresh-stats-btn');
-        btn.disabled = true;
-        btn.textContent = 'Chargement...';
-
-        try {
-            const response = await fetch('/api/batch/set-stats');
-            const stats = await response.json();
-
-            // Update progress cells
-            document.querySelectorAll('.set-progress').forEach(cell => {
-                const setId = cell.dataset.setId;
-                const data = stats[setId];
-
-                if (data && data.card_count > 0) {
-                    const barColor = data.pct === 100 ? 'var(--accent-green)' : 'var(--accent-blue)';
-                    let errorsHtml = '';
-                    if (data.error_count > 0) {
-                        errorsHtml = `<div class="set-errors" style="font-size: 11px; color: var(--accent-red); margin-top: 2px;">${data.error_count} err (${data.error_pct}%)</div>`;
-                    }
-                    cell.innerHTML = `
-                        <div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;">
-                            <span class="mono set-counts">${data.price_count}/${data.card_count}</span>
-                            <div style="width: 60px; height: 6px; background: var(--bg-secondary); border-radius: 3px; overflow: hidden;">
-                                <div class="set-bar" style="width: ${data.pct}%; height: 100%; background: ${barColor};"></div>
-                            </div>
-                            <span class="mono set-pct" style="width: 40px;">${data.pct}%</span>
-                        </div>
-                        ${errorsHtml}
-                    `;
-                } else if (data) {
-                    cell.textContent = '-';
-                }
-            });
-
-            // Update last snapshot date cells
-            document.querySelectorAll('.set-last-snapshot').forEach(cell => {
-                const setId = cell.dataset.setId;
-                const data = stats[setId];
-                cell.textContent = data && data.last_snapshot ? data.last_snapshot : '-';
-            });
-        } catch (e) {
-            console.error('Erreur refresh:', e);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Actualiser';
-        }
-    }
-
-    // Auto-launch button
-    document.getElementById('auto-launch-btn').addEventListener('click', async function() {
-        const limit = document.getElementById('auto-limit').value;
-        const maxWorkers = parseInt(document.getElementById('auto-workers').value);
-
-        this.disabled = true;
-        this.textContent = 'Chargement...';
-
-        try {
-            // Get priority sets
-            const priorityResponse = await fetch(`/api/batch/priority-sets?limit=${limit}`);
-            const priorityData = await priorityResponse.json();
-
-            if (!priorityData.sets || priorityData.sets.length === 0) {
-                alert('Aucun set a lancer');
-                return;
-            }
-
-            // Format sets for the queue
-            const sets = priorityData.sets.map(s => ({
-                set_id: s.set_id,
-                set_name: s.set_name
-            }));
-
-            // Launch batch with max_workers
-            const response = await fetch('/api/batch/run', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ sets, max_workers: maxWorkers })
-            });
-
-            const data = await response.json();
-
-            if (response.ok) {
-                showQueueStatus();
-                startStatusPolling();
-            } else {
-                alert('Erreur: ' + (data.error || 'Erreur inconnue'));
-            }
-        } catch (error) {
-            alert('Erreur reseau: ' + error.message);
-        } finally {
-            this.disabled = false;
-            this.textContent = 'Lancer auto';
-        }
-    });
+document.getElementById('auto-launch-btn').addEventListener('click', async function() {
+    const limit = document.getElementById('auto-limit').value;
+    const maxWorkers = parseInt(document.getElementById('auto-workers').value);
+    this.disabled = true; this.textContent = 'Chargement...';
+    try {
+        const priorityResponse = await fetch(`/api/batch/priority-sets?limit=${limit}`);
+        const priorityData = await priorityResponse.json();
+        if (!priorityData.sets || priorityData.sets.length === 0) { showToast('Aucun set a lancer', 'warning'); return; }
+        const sets = priorityData.sets.map(s => ({ set_id: s.set_id, set_name: s.set_name }));
+        const response = await fetch('/api/batch/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sets, max_workers: maxWorkers }) });
+        if (response.ok) { showQueueStatus(); startStatusPolling(); } else { const data = await response.json(); showToast('Erreur: ' + (data.error || 'Erreur'), 'error'); }
+    } catch (error) { showToast('Erreur: ' + error.message, 'error'); }
+    finally { this.disabled = false; this.textContent = 'Lancer auto'; }
+});
 </script>
 {% endblock %}

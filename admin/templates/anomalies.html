@@ -3,143 +3,197 @@
 {% block title %}Anomalies{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Anomalies</h1>
-    <p>Cartes nécessitant une attention particulière</p>
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Anomalies</h1>
+    <p class="text-gray-500 dark:text-gray-400 mt-1">Cartes nécessitant une attention particulière</p>
 </div>
 
-<form class="filters" method="GET">
-    <div class="filter-group">
-        <label>Dispersion ></label>
-        <input type="number" name="dispersion" value="{{ dispersion_threshold }}" step="0.5" style="width: 100px;">
+<!-- Filtres -->
+<form method="GET" class="bg-white dark:bg-dark-700 rounded-lg p-4 mb-6 shadow-sm">
+    <div class="flex flex-wrap items-end gap-4">
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dispersion &gt;</label>
+            <input type="number" name="dispersion" value="{{ dispersion_threshold }}" step="0.5"
+                class="w-24 px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confiance &lt;</label>
+            <input type="number" name="confidence" value="{{ confidence_threshold }}"
+                class="w-24 px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+            Filtrer
+        </button>
     </div>
-    <div class="filter-group">
-        <label>Confiance <</label>
-        <input type="number" name="confidence" value="{{ confidence_threshold }}" style="width: 100px;">
-    </div>
-    <button type="submit" class="btn btn-primary">Filtrer</button>
 </form>
 
-<div class="card" style="padding: 0; overflow: hidden;">
-    <div style="padding: 24px 24px 0;">
-        <h2>Haute dispersion <span class="badge badge-low" style="margin-left: 8px;">{{ high_dispersion|length }}</span></h2>
-        <p class="text-secondary" style="font-size: 14px; margin-top: 4px;">Requêtes eBay probablement trop larges</p>
+<!-- Stats rapides -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+        <div class="flex items-center justify-between">
+            <span class="text-red-700 dark:text-red-400 font-medium">Haute dispersion</span>
+            <span class="text-2xl font-bold text-red-700 dark:text-red-400">{{ high_dispersion|length }}</span>
+        </div>
+    </div>
+    <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+        <div class="flex items-center justify-between">
+            <span class="text-yellow-700 dark:text-yellow-400 font-medium">Confiance faible</span>
+            <span class="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{{ low_conf|length }}</span>
+        </div>
+    </div>
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div class="flex items-center justify-between">
+            <span class="text-blue-700 dark:text-blue-400 font-medium">Fallback CM</span>
+            <span class="text-2xl font-bold text-blue-700 dark:text-blue-400">{{ mismatches|length }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- Haute dispersion -->
+<div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm mb-6 overflow-hidden">
+    <div class="p-4 border-b border-gray-200 dark:border-dark-600">
+        <div class="flex items-center gap-2">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Haute dispersion</h2>
+            <span class="px-2 py-0.5 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full">{{ high_dispersion|length }}</span>
+        </div>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Requêtes eBay probablement trop larges</p>
     </div>
     {% if high_dispersion %}
-    <table>
-        <thead>
-            <tr>
-                <th>Carte</th>
-                <th>Set</th>
-                <th>Dispersion</th>
-                <th>p20</th>
-                <th>p80</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for card, buy_price, snap in high_dispersion %}
-            <tr>
-                <td>
-                    <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link card-name">{{ card.name }}</a>
-                </td>
-                <td class="text-secondary">{{ card.set_name }}</td>
-                <td><span class="badge badge-low">{{ "%.2f"|format(snap.dispersion) }}</span></td>
-                <td class="price">{{ "%.2f €"|format(snap.p20) if snap.p20 else '—' }}</td>
-                <td class="price">{{ "%.2f €"|format(snap.p80) if snap.p80 else '—' }}</td>
-                <td>
-                    <div class="actions">
-                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning btn-sm">Éditer</a>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="overflow-x-auto">
+        <table class="w-full min-w-[600px]">
+            <thead class="bg-gray-50 dark:bg-dark-600">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Carte</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Set</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Dispersion</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">p20</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">p80</th>
+                    <th class="px-4 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-dark-600">
+                {% for card, buy_price, snap in high_dispersion %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-dark-600/50">
+                    <td class="px-4 py-3">
+                        <a href="{{ url_for('card_detail', card_id=card.id) }}" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{{ card.name }}</a>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ card.set_name }}</td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded">{{ "%.2f"|format(snap.dispersion) }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm text-gray-900 dark:text-white font-mono">{{ "%.2f €"|format(snap.p20) if snap.p20 else '—' }}</td>
+                    <td class="px-4 py-3 text-right text-sm text-gray-900 dark:text-white font-mono">{{ "%.2f €"|format(snap.p80) if snap.p80 else '—' }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="px-3 py-1.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors">Éditer</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
-    <div class="empty-state">
+    <div class="p-8 text-center text-gray-500 dark:text-gray-400">
+        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
         <p>Aucune anomalie de dispersion</p>
     </div>
     {% endif %}
 </div>
 
-<div class="card" style="padding: 0; overflow: hidden;">
-    <div style="padding: 24px 24px 0;">
-        <h2>Confiance faible <span class="badge badge-disabled" style="margin-left: 8px;">{{ low_conf|length }}</span></h2>
-        <p class="text-secondary" style="font-size: 14px; margin-top: 4px;">Données insuffisantes ou incohérentes</p>
+<!-- Confiance faible -->
+<div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm mb-6 overflow-hidden">
+    <div class="p-4 border-b border-gray-200 dark:border-dark-600">
+        <div class="flex items-center gap-2">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Confiance faible</h2>
+            <span class="px-2 py-0.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full">{{ low_conf|length }}</span>
+        </div>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Données insuffisantes ou incohérentes</p>
     </div>
     {% if low_conf %}
-    <table>
-        <thead>
-            <tr>
-                <th>Carte</th>
-                <th>Set</th>
-                <th>Confiance</th>
-                <th>Prix neuf</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for card, buy_price in low_conf %}
-            <tr>
-                <td>
-                    <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link card-name">{{ card.name }}</a>
-                </td>
-                <td class="text-secondary">{{ card.set_name }}</td>
-                <td><span class="badge badge-disabled">{{ buy_price.confidence_score }}%</span></td>
-                <td class="price">{{ "%.2f €"|format(buy_price.buy_neuf) if buy_price.buy_neuf else '—' }}</td>
-                <td>
-                    <div class="actions">
-                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning btn-sm">Éditer</a>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="overflow-x-auto">
+        <table class="w-full min-w-[500px]">
+            <thead class="bg-gray-50 dark:bg-dark-600">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Carte</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Set</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Confiance</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Prix neuf</th>
+                    <th class="px-4 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-dark-600">
+                {% for card, buy_price in low_conf %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-dark-600/50">
+                    <td class="px-4 py-3">
+                        <a href="{{ url_for('card_detail', card_id=card.id) }}" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{{ card.name }}</a>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ card.set_name }}</td>
+                    <td class="px-4 py-3">
+                        <span class="px-2 py-1 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">{{ buy_price.confidence_score }}%</span>
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm text-gray-900 dark:text-white font-mono">{{ "%.2f €"|format(buy_price.buy_neuf) if buy_price.buy_neuf else '—' }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="px-3 py-1.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors">Éditer</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
-    <div class="empty-state">
+    <div class="p-8 text-center text-gray-500 dark:text-gray-400">
+        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
         <p>Aucune anomalie de confiance</p>
     </div>
     {% endif %}
 </div>
 
-<div class="card" style="padding: 0; overflow: hidden;">
-    <div style="padding: 24px 24px 0;">
-        <h2>Fallback Cardmarket <span class="badge badge-ok" style="margin-left: 8px;">{{ mismatches|length }}</span></h2>
-        <p class="text-secondary" style="font-size: 14px; margin-top: 4px;">Prix eBay incohérents, utilisation de Cardmarket</p>
+<!-- Fallback Cardmarket -->
+<div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm overflow-hidden">
+    <div class="p-4 border-b border-gray-200 dark:border-dark-600">
+        <div class="flex items-center gap-2">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Fallback Cardmarket</h2>
+            <span class="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full">{{ mismatches|length }}</span>
+        </div>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Prix eBay incohérents, utilisation de Cardmarket</p>
     </div>
     {% if mismatches %}
-    <table>
-        <thead>
-            <tr>
-                <th>Carte</th>
-                <th>Set</th>
-                <th>Prix neuf</th>
-                <th>CM trend</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for card, buy_price in mismatches %}
-            <tr>
-                <td>
-                    <a href="{{ url_for('card_detail', card_id=card.id) }}" class="link card-name">{{ card.name }}</a>
-                </td>
-                <td class="text-secondary">{{ card.set_name }}</td>
-                <td class="price">{{ "%.2f €"|format(buy_price.buy_neuf) if buy_price.buy_neuf else '—' }}</td>
-                <td class="price">{{ "%.2f €"|format(card.cm_trend) if card.cm_trend else '—' }}</td>
-                <td>
-                    <div class="actions">
-                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-warning btn-sm">Éditer</a>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="overflow-x-auto">
+        <table class="w-full min-w-[500px]">
+            <thead class="bg-gray-50 dark:bg-dark-600">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Carte</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Set</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Prix neuf</th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">CM trend</th>
+                    <th class="px-4 py-3"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-dark-600">
+                {% for card, buy_price in mismatches %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-dark-600/50">
+                    <td class="px-4 py-3">
+                        <a href="{{ url_for('card_detail', card_id=card.id) }}" class="text-blue-600 dark:text-blue-400 hover:underline font-medium">{{ card.name }}</a>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{{ card.set_name }}</td>
+                    <td class="px-4 py-3 text-right text-sm text-gray-900 dark:text-white font-mono">{{ "%.2f €"|format(buy_price.buy_neuf) if buy_price.buy_neuf else '—' }}</td>
+                    <td class="px-4 py-3 text-right text-sm text-gray-900 dark:text-white font-mono">{{ "%.2f €"|format(card.cm_trend) if card.cm_trend else '—' }}</td>
+                    <td class="px-4 py-3 text-right">
+                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="px-3 py-1.5 text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors">Éditer</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     {% else %}
-    <div class="empty-state">
+    <div class="p-8 text-center text-gray-500 dark:text-gray-400">
+        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
         <p>Aucun fallback Cardmarket</p>
     </div>
     {% endif %}

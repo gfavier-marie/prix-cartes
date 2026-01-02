@@ -3,89 +3,181 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Dashboard</h1>
-    <p>Vue d'ensemble de vos prix de rachat Pokemon</p>
+<!-- Page Header -->
+<div class="mb-8">
+    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+    <p class="mt-1 text-gray-500 dark:text-gray-400">Vue d'ensemble de vos prix de rachat Pokemon</p>
 </div>
 
-<div class="stats-grid">
-    <div class="stat-box accent-blue">
-        <div class="stat-value">{{ "{:,}".format(total_cards).replace(",", " ") }}</div>
-        <div class="stat-label">Cartes actives</div>
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
+    <!-- Total Cards -->
+    <div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 hover:shadow-lg transition-shadow">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Cartes actives</p>
+                <p class="mt-2 text-3xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                    {{ "{:,}".format(total_cards).replace(",", " ") }}
+                </p>
+            </div>
+            <div class="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                </svg>
+            </div>
+        </div>
     </div>
-    <div class="stat-box accent-green">
-        <div class="stat-value">{{ "{:,}".format(cards_with_price).replace(",", " ") }}</div>
-        <div class="stat-label">Avec prix calculé</div>
+
+    <!-- Cards with Price -->
+    <div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 hover:shadow-lg transition-shadow">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Avec prix calcule</p>
+                <p class="mt-2 text-3xl font-bold text-green-600 dark:text-green-400 tabular-nums">
+                    {{ "{:,}".format(cards_with_price).replace(",", " ") }}
+                </p>
+            </div>
+            <div class="p-3 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+        </div>
     </div>
-    <div class="stat-box accent-yellow">
-        <div class="stat-value">{{ low_conf }}</div>
-        <div class="stat-label">Confiance faible</div>
+
+    <!-- Low Confidence -->
+    <div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 hover:shadow-lg transition-shadow">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Confiance faible</p>
+                <p class="mt-2 text-3xl font-bold text-yellow-600 dark:text-yellow-400 tabular-nums">
+                    {{ low_conf }}
+                </p>
+            </div>
+            <div class="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
+                <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+            </div>
+        </div>
     </div>
 </div>
 
+<!-- API Usage Card -->
 {% if ebay_usage %}
-<div class="card">
-    <div class="card-header">
-        <h2>Usage API eBay</h2>
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Usage API eBay</h2>
         {% if ebay_usage.remaining == 0 %}
-        <span class="badge badge-error">Limite atteinte</span>
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+            Limite atteinte
+        </span>
         {% elif ebay_usage.percent > 80 %}
-        <span class="badge badge-warning">{{ ebay_usage.percent }}%</span>
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+            {{ ebay_usage.percent }}% utilise
+        </span>
         {% else %}
-        <span class="badge badge-ok">{{ ebay_usage.percent }}%</span>
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+            {{ ebay_usage.percent }}% utilise
+        </span>
         {% endif %}
     </div>
-    <div class="progress-bar-container" style="background: #333; border-radius: 4px; height: 24px; margin: 12px 0; position: relative; overflow: hidden;">
-        <div class="progress-bar-fill" style="background: {% if ebay_usage.percent > 80 %}#ef4444{% elif ebay_usage.percent > 50 %}#f59e0b{% else %}#22c55e{% endif %}; height: 100%; width: {{ ebay_usage.percent }}%; transition: width 0.3s;"></div>
-        <span style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: white; font-size: 12px; font-weight: 500;">
-            {{ "{:,}".format(ebay_usage.count).replace(",", " ") }} / {{ "{:,}".format(ebay_usage.limit).replace(",", " ") }} appels
+
+    <!-- Progress Bar -->
+    <div class="relative h-8 bg-gray-200 dark:bg-dark-600 rounded-lg overflow-hidden mb-3">
+        <div class="absolute inset-y-0 left-0 rounded-lg transition-all duration-300
+            {% if ebay_usage.percent > 80 %}bg-red-500{% elif ebay_usage.percent > 50 %}bg-yellow-500{% else %}bg-green-500{% endif %}"
+            style="width: {{ ebay_usage.percent }}%">
+        </div>
+        <div class="absolute inset-0 flex items-center justify-center">
+            <span class="text-sm font-medium text-gray-700 dark:text-white drop-shadow-sm">
+                {{ "{:,}".format(ebay_usage.count).replace(",", " ") }} / {{ "{:,}".format(ebay_usage.limit).replace(",", " ") }} appels
+            </span>
+        </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row sm:justify-between text-sm text-gray-500 dark:text-gray-400 gap-1">
+        <span>Restants: <span class="font-medium text-gray-700 dark:text-gray-300">{{ "{:,}".format(ebay_usage.remaining).replace(",", " ") }}</span></span>
+        {% if ebay_usage.reset_formatted %}
+        <span>Reset: <span class="font-medium text-gray-700 dark:text-gray-300">{{ ebay_usage.reset_formatted }}</span></span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Last Batch Card -->
+{% if last_batch %}
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6 mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Dernier batch</h2>
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+            {{ last_batch.mode.value }}
         </span>
     </div>
-    <div style="display: flex; justify-content: space-between; color: #888; font-size: 13px;">
-        <span>Restants: {{ "{:,}".format(ebay_usage.remaining).replace(",", " ") }}</span>
-        {% if ebay_usage.reset_formatted %}
-        <span>Reset: {{ ebay_usage.reset_formatted }}</span>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
 
-{% if last_batch %}
-<div class="card">
-    <div class="card-header">
-        <h2>Dernier batch</h2>
-        <span class="badge badge-ok">{{ last_batch.mode.value }}</span>
-    </div>
-    <table class="info-table">
-        <tr>
-            <td>Date</td>
-            <td>{{ last_batch.started_at.strftime('%d/%m/%Y à %H:%M') }}</td>
-        </tr>
-        <tr>
-            <td>Cartes traitées</td>
-            <td>{{ last_batch.cards_succeeded }} / {{ last_batch.cards_targeted }}</td>
-        </tr>
-        <tr>
-            <td>Échecs</td>
-            <td>{{ last_batch.cards_failed }}</td>
-        </tr>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="p-4 bg-gray-50 dark:bg-dark-600 rounded-lg">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</p>
+            <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {{ last_batch.started_at.strftime('%d/%m/%Y a %H:%M') }}
+            </p>
+        </div>
+        <div class="p-4 bg-gray-50 dark:bg-dark-600 rounded-lg">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cartes traitees</p>
+            <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {{ last_batch.cards_succeeded }} / {{ last_batch.cards_targeted }}
+            </p>
+        </div>
+        <div class="p-4 bg-gray-50 dark:bg-dark-600 rounded-lg">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Echecs</p>
+            <p class="mt-1 text-sm font-medium {% if last_batch.cards_failed > 0 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-white{% endif %}">
+                {{ last_batch.cards_failed }}
+            </p>
+        </div>
         {% if last_batch.finished_at %}
-        <tr>
-            <td>Durée</td>
-            <td>{{ ((last_batch.finished_at - last_batch.started_at).total_seconds() / 60)|round(1) }} minutes</td>
-        </tr>
+        <div class="p-4 bg-gray-50 dark:bg-dark-600 rounded-lg">
+            <p class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Duree</p>
+            <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+                {{ ((last_batch.finished_at - last_batch.started_at).total_seconds() / 60)|round(1) }} minutes
+            </p>
+        </div>
         {% endif %}
-    </table>
+    </div>
 </div>
 {% endif %}
 
-<div class="card">
-    <h2>Actions rapides</h2>
-    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-        <a href="{{ url_for('cards_list') }}" class="btn btn-primary">Voir les cartes</a>
-        <a href="{{ url_for('anomalies') }}" class="btn btn-warning">Voir les anomalies</a>
-        <a href="{{ url_for('batches') }}" class="btn btn-ghost">Historique batches</a>
-        <a href="{{ url_for('export_csv') }}" class="btn btn-ok" style="background: #22c55e; color: white;">Exporter CSV</a>
+<!-- Quick Actions -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Actions rapides</h2>
+    <div class="flex flex-wrap gap-3">
+        <a href="{{ url_for('cards_list') }}"
+           class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+            </svg>
+            Voir les cartes
+        </a>
+        <a href="{{ url_for('anomalies') }}"
+           class="inline-flex items-center gap-2 px-4 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            Voir les anomalies
+        </a>
+        <a href="{{ url_for('batches') }}"
+           class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 dark:bg-dark-600 hover:bg-gray-200 dark:hover:bg-dark-500 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg border border-gray-300 dark:border-dark-500 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Historique batches
+        </a>
+        <a href="{{ url_for('export_csv') }}"
+           class="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Exporter CSV
+        </a>
     </div>
 </div>
 {% endblock %}

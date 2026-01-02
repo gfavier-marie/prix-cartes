@@ -4,326 +4,502 @@
 
 {% block content %}
 {% set filter_params = "search=" ~ search ~ "&has_data=" ~ has_data ~ "&set=" ~ set_filter ~ "&date_filter=" ~ date_filter ~ "&date_from=" ~ date_from ~ "&date_to=" ~ date_to ~ "&months_ago=" ~ months_ago ~ "&has_error=" ~ has_error ~ "&error_hours=" ~ error_hours %}
-<div class="page-header">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+
+<!-- Page Header -->
+<div class="mb-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-            <h1>Cartes</h1>
-            <p>{{ "{:,}".format(total).replace(",", " ") }} cartes trouvées</p>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Cartes</h1>
+            <p class="mt-1 text-gray-500 dark:text-gray-400">{{ "{:,}".format(total).replace(",", " ") }} cartes trouvees</p>
         </div>
-        <button type="button" class="btn btn-ghost" onclick="regenerateAllQueries()" id="regen-btn">
-            Régénérer requêtes eBay
+        <button type="button"
+                onclick="regenerateAllQueries()"
+                id="regen-btn"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-dark-600 hover:bg-gray-200 dark:hover:bg-dark-500 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg border border-gray-300 dark:border-dark-500 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Regenerer requetes eBay
         </button>
     </div>
 </div>
 
+<!-- Filters -->
+<form class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-4 sm:p-6 mb-6" method="GET">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <!-- Search -->
+        <div class="sm:col-span-2 lg:col-span-1 xl:col-span-2">
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Rechercher</label>
+            <input type="text"
+                   name="search"
+                   placeholder="Nom, set, ID..."
+                   value="{{ search }}"
+                   class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+        </div>
+
+        <!-- Set Filter -->
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Serie / Extension</label>
+            <select name="set"
+                    class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                <option value="">Toutes les series</option>
+                {% for serie in series_sets %}
+                <optgroup label="{{ serie.serie_name }}">
+                    {% for s in serie.sets %}
+                    <option value="{{ s.id }}" {% if set_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Has Data -->
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Donnees eBay</label>
+            <select name="has_data"
+                    class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                <option value="">Toutes</option>
+                <option value="yes" {% if has_data == 'yes' %}selected{% endif %}>Avec donnees</option>
+                <option value="no" {% if has_data == 'no' %}selected{% endif %}>Sans donnees</option>
+            </select>
+        </div>
+
+        <!-- Date Filter -->
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Date mise a jour</label>
+            <select name="date_filter"
+                    id="date_filter"
+                    onchange="toggleDateInputs()"
+                    class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                <option value="">Toutes</option>
+                <option value="range" {% if date_filter == 'range' %}selected{% endif %}>Plage de dates</option>
+                <option value="before" {% if date_filter == 'before' %}selected{% endif %}>Avant le...</option>
+                <option value="months" {% if date_filter == 'months' %}selected{% endif %}>X derniers mois</option>
+                <option value="never" {% if date_filter == 'never' %}selected{% endif %}>Jamais mis a jour</option>
+            </select>
+        </div>
+
+        <!-- Error Filter -->
+        <div>
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Erreur</label>
+            <select name="has_error"
+                    id="has_error"
+                    onchange="toggleErrorHours()"
+                    class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                <option value="">Toutes</option>
+                <option value="yes" {% if has_error == 'yes' %}selected{% endif %}>Avec erreur</option>
+                <option value="no" {% if has_error == 'no' %}selected{% endif %}>Sans erreur</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Conditional Filters Row -->
+    <div id="conditional-filters" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4" style="display: none;">
+        <div id="date-range-group" class="{% if date_filter != 'range' %}hidden{% endif %}">
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Du</label>
+            <input type="date"
+                   name="date_from"
+                   value="{{ date_from }}"
+                   class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+        </div>
+
+        <div id="date-to-group" class="{% if date_filter not in ['range', 'before'] %}hidden{% endif %}">
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">
+                {% if date_filter == 'before' %}Avant le{% else %}Au{% endif %}
+            </label>
+            <input type="date"
+                   name="date_to"
+                   value="{{ date_to }}"
+                   class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+        </div>
+
+        <div id="months-group" class="{% if date_filter != 'months' %}hidden{% endif %}">
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Derniers mois</label>
+            <select name="months_ago"
+                    class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                <option value="1" {% if months_ago == '1' %}selected{% endif %}>1 mois</option>
+                <option value="2" {% if months_ago == '2' %}selected{% endif %}>2 mois</option>
+                <option value="3" {% if months_ago == '3' %}selected{% endif %}>3 mois</option>
+                <option value="6" {% if months_ago == '6' %}selected{% endif %}>6 mois</option>
+                <option value="12" {% if months_ago == '12' %}selected{% endif %}>12 mois</option>
+            </select>
+        </div>
+
+        <div id="error-hours-group" class="{% if has_error != 'yes' %}hidden{% endif %}">
+            <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Depuis</label>
+            <select name="error_hours"
+                    class="w-full px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-200 dark:border-dark-500 rounded-lg text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                <option value="">Toutes</option>
+                <option value="24" {% if error_hours == '24' %}selected{% endif %}>< 24h</option>
+                <option value="48" {% if error_hours == '48' %}selected{% endif %}>< 48h</option>
+                <option value="168" {% if error_hours == '168' %}selected{% endif %}>< 7 jours</option>
+                <option value="720" {% if error_hours == '720' %}selected{% endif %}>< 30 jours</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Submit Button -->
+    <div class="mt-4 flex justify-end">
+        <button type="submit"
+                class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+            </svg>
+            Filtrer
+        </button>
+    </div>
+</form>
+
+<!-- Help Legend (Collapsible) -->
+<details class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 mb-6 group">
+    <summary class="px-4 py-3 cursor-pointer flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+        <svg class="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+        Aide : signification des indicateurs
+    </summary>
+    <div class="px-4 pb-4 border-t border-gray-100 dark:border-dark-500 pt-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+            <div class="flex gap-3 p-3 bg-gray-50 dark:bg-dark-600 rounded-lg">
+                <span class="font-semibold text-gray-900 dark:text-white shrink-0">p20</span>
+                <span class="text-gray-600 dark:text-gray-400">20e percentile des prix eBay. 20% des annonces sont en dessous.</span>
+            </div>
+            <div class="flex gap-3 p-3 bg-gray-50 dark:bg-dark-600 rounded-lg">
+                <span class="font-semibold text-gray-900 dark:text-white shrink-0">p50</span>
+                <span class="text-gray-600 dark:text-gray-400">Mediane des prix eBay. Prix "central" du marche.</span>
+            </div>
+            <div class="flex gap-3 p-3 bg-gray-50 dark:bg-dark-600 rounded-lg">
+                <span class="font-semibold text-gray-900 dark:text-white shrink-0">Ann.</span>
+                <span class="text-gray-600 dark:text-gray-400">Nombre d'annonces. <span class="text-green-600 dark:text-green-400">Vert si &ge;10</span>.</span>
+            </div>
+            <div class="flex gap-3 p-3 bg-gray-50 dark:bg-dark-600 rounded-lg">
+                <span class="font-semibold text-gray-900 dark:text-white shrink-0">Disp.</span>
+                <span class="text-gray-600 dark:text-gray-400">Dispersion = p80/p20. <span class="text-green-600 dark:text-green-400">&le;2 = homogene</span>.</span>
+            </div>
+            <div class="flex gap-3 p-3 bg-gray-50 dark:bg-dark-600 rounded-lg">
+                <span class="font-semibold text-gray-900 dark:text-white shrink-0">Age</span>
+                <span class="text-gray-600 dark:text-gray-400">Age median des annonces. <span class="text-green-600 dark:text-green-400">&le;14j = frais</span>.</span>
+            </div>
+            <div class="flex gap-3 p-3 bg-gray-50 dark:bg-dark-600 rounded-lg">
+                <span class="font-semibold text-gray-900 dark:text-white shrink-0">CV</span>
+                <span class="text-gray-600 dark:text-gray-400">Coefficient de Variation. <span class="text-green-600 dark:text-green-400">&le;30% = stable</span>.</span>
+            </div>
+        </div>
+    </div>
+</details>
+
+<!-- Cards Table -->
+<div class="bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full min-w-[1000px]">
+            <thead>
+                <tr class="border-b border-gray-200 dark:border-dark-500 bg-gray-50 dark:bg-dark-600">
+                    <th class="w-14 px-3 py-3"></th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Carte</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Set</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Variant</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">p20</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">p50</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">p80</th>
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ann.</th>
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Disp.</th>
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Age</th>
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Maj</th>
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ventes</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Erreur</th>
+                    <th class="px-3 py-3 w-24"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-dark-500">
+                {% for card, snapshot, sold_count in cards %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors">
+                    <!-- Image -->
+                    <td class="px-3 py-2">
+                        <img src="{{ card.image_url }}"
+                             alt="{{ card.effective_name }}"
+                             class="h-12 w-auto rounded shadow-sm"
+                             loading="lazy"
+                             onerror="this.style.display='none'">
+                    </td>
+
+                    <!-- Card Name -->
+                    <td class="px-3 py-2">
+                        <a href="{{ url_for('card_detail', card_id=card.id) }}?page={{ page }}&{{ filter_params }}"
+                           class="font-medium text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                            {{ card.effective_name }}
+                        </a>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
+                            {{ card.effective_local_id }}
+                            {% if card.has_overrides %}
+                            <span class="text-blue-600 dark:text-blue-400 ml-1">Override</span>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Set -->
+                    <td class="px-3 py-2 text-sm text-gray-600 dark:text-gray-400">{{ card.effective_set_name }}</td>
+
+                    <!-- Variant -->
+                    <td class="px-3 py-2">
+                        <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-dark-500 text-gray-600 dark:text-gray-300">
+                            {{ card.variant.value if card.variant else 'NORMAL' }}
+                        </span>
+                    </td>
+
+                    <!-- p20 -->
+                    <td class="px-3 py-2 text-right">
+                        {% if snapshot and snapshot.p20 %}
+                        <span class="font-medium text-gray-900 dark:text-white tabular-nums">{{ "%.2f"|format(snapshot.p20) }} &euro;</span>
+                        {% if snapshot.reverse_p20 %}
+                        <div class="text-xs text-blue-600 dark:text-blue-400 italic">{{ "%.2f"|format(snapshot.reverse_p20) }} &euro;</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- p50 -->
+                    <td class="px-3 py-2 text-right">
+                        {% if snapshot and snapshot.p50 %}
+                        <span class="font-medium text-gray-900 dark:text-white tabular-nums">{{ "%.2f"|format(snapshot.p50) }} &euro;</span>
+                        {% if snapshot.reverse_p50 %}
+                        <div class="text-xs text-blue-600 dark:text-blue-400 italic">{{ "%.2f"|format(snapshot.reverse_p50) }} &euro;</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- p80 -->
+                    <td class="px-3 py-2 text-right">
+                        {% if snapshot and snapshot.p80 %}
+                        <span class="font-medium text-gray-900 dark:text-white tabular-nums">{{ "%.2f"|format(snapshot.p80) }} &euro;</span>
+                        {% if snapshot.reverse_p80 %}
+                        <div class="text-xs text-blue-600 dark:text-blue-400 italic">{{ "%.2f"|format(snapshot.reverse_p80) }} &euro;</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Sample Size -->
+                    <td class="px-3 py-2 text-center">
+                        {% if snapshot and snapshot.sample_size %}
+                        <span class="{% if snapshot.sample_size >= 10 %}text-green-600 dark:text-green-400 font-medium{% elif snapshot.sample_size >= 5 %}text-gray-600 dark:text-gray-400{% else %}text-gray-400{% endif %}">
+                            {{ snapshot.sample_size }}
+                        </span>
+                        {% if snapshot.reverse_sample_size %}
+                        <div class="text-xs text-blue-600 dark:text-blue-400 italic">{{ snapshot.reverse_sample_size }}</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Dispersion -->
+                    <td class="px-3 py-2 text-center">
+                        {% if snapshot and snapshot.dispersion %}
+                        <span class="{% if snapshot.dispersion <= 2 %}text-green-600 dark:text-green-400 font-medium{% elif snapshot.dispersion <= 3 %}text-gray-600 dark:text-gray-400{% else %}text-red-500{% endif %}">
+                            {{ "%.1f"|format(snapshot.dispersion) }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Age -->
+                    <td class="px-3 py-2 text-center">
+                        {% if snapshot and snapshot.age_median_days %}
+                        <span class="{% if snapshot.age_median_days <= 14 %}text-green-600 dark:text-green-400 font-medium{% elif snapshot.age_median_days <= 30 %}text-gray-600 dark:text-gray-400{% else %}text-gray-400{% endif %}">
+                            {{ snapshot.age_median_days|int }}j
+                        </span>
+                        {% if snapshot.reverse_age_median_days %}
+                        <div class="text-xs text-blue-600 dark:text-blue-400 italic">{{ snapshot.reverse_age_median_days|int }}j</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Last Update -->
+                    <td class="px-3 py-2 text-center">
+                        {% if snapshot and snapshot.created_at %}
+                        <span class="text-xs text-gray-500 dark:text-gray-400">{{ snapshot.created_at.strftime('%d/%m %H:%M') }}</span>
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Sold Count -->
+                    <td class="px-3 py-2 text-center">
+                        {% if sold_count %}
+                        <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                            {{ sold_count }}
+                        </span>
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Error -->
+                    <td class="px-3 py-2">
+                        {% if card.last_error %}
+                        <div class="group relative">
+                            <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 max-w-[100px] truncate cursor-help">
+                                {{ card.last_error[:20] }}{% if card.last_error|length > 20 %}...{% endif %}
+                            </span>
+                            {% if card.last_error_at %}
+                            <div class="text-[10px] text-gray-400 mt-0.5">{{ card.last_error_at.strftime('%d/%m %H:%M') }}</div>
+                            {% endif %}
+                            <!-- Tooltip -->
+                            <div class="hidden group-hover:block absolute z-10 left-0 bottom-full mb-1 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg max-w-xs whitespace-normal">
+                                {{ card.last_error }}
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="text-gray-400">-</span>
+                        {% endif %}
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="px-3 py-2">
+                        <div class="flex items-center justify-end gap-1">
+                            {% if card.effective_ebay_query %}
+                            <a href="https://www.ebay.fr/sch/i.html?_nkw={{ card.effective_ebay_query | urlencode }}&_sacat=183454"
+                               target="_blank"
+                               rel="noopener"
+                               class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-500 rounded transition-colors"
+                               title="Rechercher sur eBay">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                </svg>
+                            </a>
+                            {% endif %}
+                            <a href="{{ url_for('card_edit', card_id=card.id) }}"
+                               class="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-dark-500 rounded transition-colors"
+                               title="Editer">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                </svg>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% set pages = (total // per_page) + (1 if total % per_page else 0) %}
+{% if pages > 1 %}
+<div class="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <p class="text-sm text-gray-500 dark:text-gray-400">
+        Page {{ page }} sur {{ pages }}
+    </p>
+    <div class="flex items-center gap-1">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}&{{ filter_params }}"
+           class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-700 border border-gray-200 dark:border-dark-500 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        {% endif %}
+
+        {% for p in range(1, pages + 1) %}
+            {% if p == 1 or p == pages or (p >= page - 2 and p <= page + 2) %}
+                <a href="?page={{ p }}&{{ filter_params }}"
+                   class="min-w-[40px] px-3 py-2 text-sm font-medium text-center rounded-lg transition-colors
+                       {% if p == page %}bg-blue-600 text-white{% else %}text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-700 border border-gray-200 dark:border-dark-500 hover:bg-gray-50 dark:hover:bg-dark-600{% endif %}">
+                    {{ p }}
+                </a>
+            {% elif p == page - 3 or p == page + 3 %}
+                <span class="px-2 text-gray-400">...</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if page < pages %}
+        <a href="?page={{ page + 1 }}&{{ filter_params }}"
+           class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-dark-700 border border-gray-200 dark:border-dark-500 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
 <script>
+// Filter visibility toggles
+function toggleDateInputs() {
+    const filter = document.getElementById('date_filter').value;
+    const conditionalRow = document.getElementById('conditional-filters');
+
+    document.getElementById('date-range-group').classList.toggle('hidden', filter !== 'range');
+    document.getElementById('date-to-group').classList.toggle('hidden', !['range', 'before'].includes(filter));
+    document.getElementById('months-group').classList.toggle('hidden', filter !== 'months');
+
+    // Show conditional row if any date filter is active
+    const showConditional = ['range', 'before', 'months'].includes(filter) ||
+                           document.getElementById('has_error').value === 'yes';
+    conditionalRow.style.display = showConditional ? '' : 'none';
+}
+
+function toggleErrorHours() {
+    const hasError = document.getElementById('has_error').value;
+    const conditionalRow = document.getElementById('conditional-filters');
+
+    document.getElementById('error-hours-group').classList.toggle('hidden', hasError !== 'yes');
+
+    // Show conditional row if any conditional filter is active
+    const dateFilter = document.getElementById('date_filter').value;
+    const showConditional = ['range', 'before', 'months'].includes(dateFilter) || hasError === 'yes';
+    conditionalRow.style.display = showConditional ? '' : 'none';
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    toggleDateInputs();
+    toggleErrorHours();
+});
+
+// Regenerate queries
 async function regenerateAllQueries() {
     const btn = document.getElementById('regen-btn');
-    const originalText = btn.textContent;
+    const originalHTML = btn.innerHTML;
 
-    if (!confirm('Régénérer toutes les requêtes eBay ? Cette opération peut prendre quelques secondes.')) {
-        return;
-    }
+    const confirmed = await confirmAction('Regenerer toutes les requetes eBay ? Cette operation peut prendre quelques secondes.');
+    if (!confirmed) return;
 
     btn.disabled = true;
-    btn.textContent = 'Régénération...';
+    btn.innerHTML = `
+        <svg class="w-4 h-4 spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+        Regeneration...
+    `;
 
     try {
         const response = await fetch('/api/cards/regenerate-queries', { method: 'POST' });
         const data = await response.json();
 
         if (data.success) {
-            alert(`${data.updated} requêtes mises à jour sur ${data.total_cards} cartes.`);
-            location.reload();
+            showToast(`${data.updated} requetes mises a jour sur ${data.total_cards} cartes.`, 'success');
+            setTimeout(() => location.reload(), 1500);
         } else {
-            alert('Erreur: ' + (data.error || 'Erreur inconnue'));
+            showToast('Erreur: ' + (data.error || 'Erreur inconnue'), 'error');
         }
     } catch (e) {
-        alert('Erreur réseau: ' + e.message);
+        showToast('Erreur reseau: ' + e.message, 'error');
     } finally {
         btn.disabled = false;
-        btn.textContent = originalText;
+        btn.innerHTML = originalHTML;
     }
 }
 </script>
-
-<form class="filters" method="GET">
-    <div class="filter-group">
-        <label>Rechercher</label>
-        <input type="text" name="search" placeholder="Nom, set, ID..." value="{{ search }}">
-    </div>
-    <div class="filter-group">
-        <label>Série / Extension</label>
-        <select name="set">
-            <option value="">Toutes les séries</option>
-            {% for serie in series_sets %}
-            <optgroup label="{{ serie.serie_name }}">
-                {% for s in serie.sets %}
-                <option value="{{ s.id }}" {% if set_filter == s.id %}selected{% endif %}>{{ s.name }}</option>
-                {% endfor %}
-            </optgroup>
-            {% endfor %}
-        </select>
-    </div>
-    <div class="filter-group">
-        <label>Données eBay</label>
-        <select name="has_data">
-            <option value="">Toutes</option>
-            <option value="yes" {% if has_data == 'yes' %}selected{% endif %}>Avec données</option>
-            <option value="no" {% if has_data == 'no' %}selected{% endif %}>Sans données</option>
-        </select>
-    </div>
-    <div class="filter-group">
-        <label>Date mise à jour</label>
-        <select name="date_filter" id="date_filter" onchange="toggleDateInputs()">
-            <option value="">Toutes</option>
-            <option value="range" {% if date_filter == 'range' %}selected{% endif %}>Plage de dates</option>
-            <option value="before" {% if date_filter == 'before' %}selected{% endif %}>Avant le...</option>
-            <option value="months" {% if date_filter == 'months' %}selected{% endif %}>X derniers mois</option>
-            <option value="never" {% if date_filter == 'never' %}selected{% endif %}>Jamais mis à jour</option>
-        </select>
-    </div>
-    <div class="filter-group date-range-inputs" id="date-range-group" style="{% if date_filter != 'range' %}display: none;{% endif %}">
-        <label>Du</label>
-        <input type="date" name="date_from" value="{{ date_from }}">
-    </div>
-    <div class="filter-group date-range-inputs date-before-inputs" id="date-to-group" style="{% if date_filter not in ['range', 'before'] %}display: none;{% endif %}">
-        <label>{% if date_filter == 'before' %}Avant le{% else %}Au{% endif %}</label>
-        <input type="date" name="date_to" value="{{ date_to }}">
-    </div>
-    <div class="filter-group months-inputs" id="months-group" style="{% if date_filter != 'months' %}display: none;{% endif %}">
-        <label>Derniers mois</label>
-        <select name="months_ago">
-            <option value="1" {% if months_ago == '1' %}selected{% endif %}>1 mois</option>
-            <option value="2" {% if months_ago == '2' %}selected{% endif %}>2 mois</option>
-            <option value="3" {% if months_ago == '3' %}selected{% endif %}>3 mois</option>
-            <option value="6" {% if months_ago == '6' %}selected{% endif %}>6 mois</option>
-            <option value="12" {% if months_ago == '12' %}selected{% endif %}>12 mois</option>
-        </select>
-    </div>
-    <div class="filter-group">
-        <label>Erreur</label>
-        <select name="has_error" id="has_error" onchange="toggleErrorHours()">
-            <option value="">Toutes</option>
-            <option value="yes" {% if has_error == 'yes' %}selected{% endif %}>Avec erreur</option>
-            <option value="no" {% if has_error == 'no' %}selected{% endif %}>Sans erreur</option>
-        </select>
-    </div>
-    <div class="filter-group" id="error-hours-group" style="{% if has_error != 'yes' %}display: none;{% endif %}">
-        <label>Depuis</label>
-        <select name="error_hours">
-            <option value="">Toutes</option>
-            <option value="24" {% if error_hours == '24' %}selected{% endif %}>< 24h</option>
-            <option value="48" {% if error_hours == '48' %}selected{% endif %}>< 48h</option>
-            <option value="168" {% if error_hours == '168' %}selected{% endif %}>< 7 jours</option>
-            <option value="720" {% if error_hours == '720' %}selected{% endif %}>< 30 jours</option>
-        </select>
-    </div>
-    <button type="submit" class="btn btn-primary">Filtrer</button>
-</form>
-
-<script>
-function toggleDateInputs() {
-    const filter = document.getElementById('date_filter').value;
-    document.getElementById('date-range-group').style.display = filter === 'range' ? '' : 'none';
-    document.getElementById('date-to-group').style.display = (filter === 'range' || filter === 'before') ? '' : 'none';
-    document.getElementById('months-group').style.display = filter === 'months' ? '' : 'none';
-}
-function toggleErrorHours() {
-    const hasError = document.getElementById('has_error').value;
-    document.getElementById('error-hours-group').style.display = hasError === 'yes' ? '' : 'none';
-}
-</script>
-
-<!-- Légende des indicateurs -->
-<details class="card" style="cursor: pointer;">
-    <summary style="padding: 12px 16px; font-weight: 500; color: var(--text-secondary);">
-        ? Aide : signification des indicateurs
-    </summary>
-    <div style="padding: 0 16px 16px; color: var(--text-secondary); font-size: 13px; line-height: 1.6;">
-        <table style="width: 100%; margin-top: 8px;">
-            <tr>
-                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>p20</strong></td>
-                <td>20e percentile des prix eBay. 20% des annonces sont en dessous de ce prix.</td>
-            </tr>
-            <tr>
-                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>p50</strong></td>
-                <td>Médiane des prix eBay (50e percentile). Prix "central" du marché.</td>
-            </tr>
-            <tr>
-                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>Ann.</strong></td>
-                <td>Nombre d'annonces eBay utilisées pour le calcul. <span style="color: var(--accent-green);">Vert si ≥10</span>, gris si ≥5, sinon faible fiabilité.</td>
-            </tr>
-            <tr>
-                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>Disp.</strong></td>
-                <td>Dispersion = p80 / p20. Mesure l'écart entre prix bas et hauts. <span style="color: var(--accent-green);">≤2 = homogène</span>, ≤3 = acceptable, >3 = hétérogène.</td>
-            </tr>
-            <tr>
-                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>Âge</strong></td>
-                <td>Âge médian des annonces en jours. <span style="color: var(--accent-green);">≤14j = données fraîches</span>, ≤30j = récent, >30j = ancien.</td>
-            </tr>
-            <tr>
-                <td style="padding: 4px 12px 4px 0; white-space: nowrap;"><strong>CV</strong></td>
-                <td>Coefficient de Variation = écart-type / moyenne. Mesure la volatilité des prix en %. <span style="color: var(--accent-green);">≤30% = stable</span>, ≤50% = modéré, >50% = très variable.</td>
-            </tr>
-        </table>
-    </div>
-</details>
-
-<div class="card" style="padding: 0; overflow: hidden;">
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 50px;"></th>
-                <th>Carte</th>
-                <th>Set</th>
-                <th>Variant</th>
-                <th>p20</th>
-                <th>p50</th>
-                <th>p80</th>
-                <th>Ann.</th>
-                <th>Disp.</th>
-                <th>Âge</th>
-                <th>Maj</th>
-                <th>Ventes</th>
-                <th>Erreur</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for card, snapshot, sold_count in cards %}
-            <tr>
-                <td style="width: 50px; padding: 4px;">
-                    <img src="{{ card.image_url }}" alt="{{ card.effective_name }}" style="height: 50px; border-radius: 3px;" loading="lazy" onerror="this.style.display='none'">
-                </td>
-                <td>
-                    <a href="{{ url_for('card_detail', card_id=card.id) }}?page={{ page }}&{{ filter_params }}" class="link card-name">{{ card.effective_name }}</a>
-                    <div class="card-meta mono">{{ card.effective_local_id }} {% if card.has_overrides %}· <span style="color: var(--accent-blue);">Override</span>{% endif %}</div>
-                </td>
-                <td class="text-secondary">{{ card.effective_set_name }}</td>
-                <td>
-                    <span class="badge badge-disabled">{{ card.variant.value if card.variant else 'NORMAL' }}</span>
-                </td>
-                <td>
-                    {% if snapshot and snapshot.p20 %}
-                        <span class="price">{{ "%.2f"|format(snapshot.p20) }} €</span>
-                        {% if snapshot.reverse_p20 %}
-                        <div style="font-style: italic; color: var(--accent-blue);">{{ "%.2f"|format(snapshot.reverse_p20) }} €</div>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if snapshot and snapshot.p50 %}
-                        <span class="price">{{ "%.2f"|format(snapshot.p50) }} €</span>
-                        {% if snapshot.reverse_p50 %}
-                        <div style="font-style: italic; color: var(--accent-blue);">{{ "%.2f"|format(snapshot.reverse_p50) }} €</div>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if snapshot and snapshot.p80 %}
-                        <span class="price">{{ "%.2f"|format(snapshot.p80) }} €</span>
-                        {% if snapshot.reverse_p80 %}
-                        <div style="font-style: italic; color: var(--accent-blue);">{{ "%.2f"|format(snapshot.reverse_p80) }} €</div>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if snapshot and snapshot.sample_size %}
-                        <span class="{% if snapshot.sample_size >= 10 %}text-primary{% elif snapshot.sample_size >= 5 %}text-secondary{% else %}text-muted{% endif %}">
-                            {{ snapshot.sample_size }}
-                        </span>
-                        {% if snapshot.reverse_sample_size %}
-                        <div style="font-style: italic; color: var(--accent-blue);">{{ snapshot.reverse_sample_size }}</div>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if snapshot and snapshot.dispersion %}
-                        <span class="{% if snapshot.dispersion <= 2 %}text-primary{% elif snapshot.dispersion <= 3 %}text-secondary{% else %}text-muted{% endif %}">
-                            {{ "%.1f"|format(snapshot.dispersion) }}
-                        </span>
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if snapshot and snapshot.age_median_days %}
-                        <span class="{% if snapshot.age_median_days <= 14 %}text-primary{% elif snapshot.age_median_days <= 30 %}text-secondary{% else %}text-muted{% endif %}">
-                            {{ snapshot.age_median_days|int }}j
-                        </span>
-                        {% if snapshot.reverse_age_median_days %}
-                        <div style="font-style: italic; color: var(--accent-blue);">{{ snapshot.reverse_age_median_days|int }}j</div>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if snapshot and snapshot.created_at %}
-                        <span class="text-secondary" style="font-size: 12px;">{{ snapshot.created_at.strftime('%d/%m %H:%M') }}</span>
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if sold_count %}
-                        <span class="badge badge-ok" style="font-size: 11px;">{{ sold_count }}</span>
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if card.last_error %}
-                        <span class="badge badge-error" title="{{ card.last_error }}" style="cursor: help; font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">{{ card.last_error[:20] }}{% if card.last_error|length > 20 %}...{% endif %}</span>
-                        {% if card.last_error_at %}
-                        <div style="font-size: 10px; color: #888;">{{ card.last_error_at.strftime('%d/%m %H:%M') }}</div>
-                        {% endif %}
-                    {% else %}
-                        <span class="text-muted">—</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="actions" style="display: flex; gap: 6px;">
-                        {% if card.effective_ebay_query %}
-                        <a href="https://www.ebay.fr/sch/i.html?_nkw={{ card.effective_ebay_query | urlencode }}&_sacat=183454" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" title="Rechercher sur eBay" style="padding: 4px 8px;">🔍</a>
-                        {% endif %}
-                        <a href="{{ url_for('card_edit', card_id=card.id) }}" class="btn btn-ghost btn-sm">Éditer</a>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-{% set pages = (total // per_page) + (1 if total % per_page else 0) %}
-{% if pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-        <a href="?page={{ page - 1 }}&{{ filter_params }}">←</a>
-    {% endif %}
-
-    {% for p in range(1, pages + 1) %}
-        {% if p == 1 or p == pages or (p >= page - 2 and p <= page + 2) %}
-            <a href="?page={{ p }}&{{ filter_params }}"
-               class="{% if p == page %}active{% endif %}">{{ p }}</a>
-        {% elif p == page - 3 or p == page + 3 %}
-            <span style="color: var(--text-muted); padding: 0 8px;">...</span>
-        {% endif %}
-    {% endfor %}
-
-    {% if page < pages %}
-        <a href="?page={{ page + 1 }}&{{ filter_params }}">→</a>
-    {% endif %}
-</div>
-{% endif %}
 {% endblock %}
