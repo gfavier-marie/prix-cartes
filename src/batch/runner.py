@@ -454,9 +454,11 @@ class BatchRunner:
             # Cooldowns
             error_cooldown = datetime.utcnow() - timedelta(hours=24)
             low_value_cooldown = date.today() - timedelta(days=low_value_refresh_days)
+            # Cooldown pour les cartes avec trop d'erreurs (basé sur last_error_at)
+            max_error_cooldown = datetime.utcnow() - timedelta(days=low_value_refresh_days)
 
             # Construire la query avec priorites
-            # Priority 0: jamais explore (NULL snapshot)
+            # Priority 0: jamais explore ET pas trop d'erreurs
             # Priority 1: erreur < max_retries et cooldown 24h OK
             # Priority 2: (erreur >= max_retries OU valeur < seuil) et cooldown X jours OK
             # Priority 3: valeur >= seuil, plus ancien d'abord
@@ -470,16 +472,35 @@ class BatchRunner:
                 Card.is_active == True,
             ).filter(
                 or_(
-                    # Jamais explore -> toujours inclus
-                    snapshot_with_price.c.card_id.is_(None),
-                    # Erreur recente < max_retries -> cooldown 24h
+                    # Jamais explore ET pas d'erreur du tout -> priorite haute
                     and_(
+                        snapshot_with_price.c.card_id.is_(None),
+                        Card.error_count == 0,
+                        Card.last_error_at.is_(None)
+                    ),
+                    # Jamais explore ET erreur < max_retries -> cooldown 24h
+                    and_(
+                        snapshot_with_price.c.card_id.is_(None),
+                        Card.error_count < max_error_retries,
+                        Card.error_count > 0,
+                        Card.last_error_at < error_cooldown
+                    ),
+                    # Jamais explore MAIS trop d'erreurs -> cooldown X jours depuis last_error_at
+                    and_(
+                        snapshot_with_price.c.card_id.is_(None),
+                        Card.error_count >= max_error_retries,
+                        or_(Card.last_error_at.is_(None), Card.last_error_at < max_error_cooldown)
+                    ),
+                    # Avec snapshot ET erreur < max_retries -> cooldown 24h
+                    and_(
+                        snapshot_with_price.c.card_id.isnot(None),
                         Card.error_count < max_error_retries,
                         or_(Card.last_error_at.is_(None), Card.last_error_at < error_cooldown)
                     ),
-                    # Erreur >= max_retries -> cooldown X jours
+                    # Erreur >= max_retries avec snapshot -> cooldown X jours
                     and_(
                         Card.error_count >= max_error_retries,
+                        snapshot_with_price.c.card_id.isnot(None),
                         snapshot_with_price.c.as_of_date < low_value_cooldown
                     ),
                     # Basse valeur -> cooldown X jours
@@ -498,12 +519,16 @@ class BatchRunner:
                     ),
                 )
             ).order_by(
-                # Priorite: 0=jamais explore, 1=erreur normale, 2=basse valeur/erreur max, 3=haute valeur
+                # Priorite: 0=jamais explore sans erreur, 1=erreur en cooldown, 2=basse valeur/erreur max, 3=haute valeur
                 case(
-                    (snapshot_with_price.c.card_id.is_(None), 0),  # Jamais explore
-                    (and_(Card.error_count < max_error_retries, Card.last_error_at.isnot(None)), 1),  # Erreur recente
-                    (Card.error_count >= max_error_retries, 2),  # Trop d'erreurs
-                    (snapshot_with_price.c.anchor_price < low_value_threshold, 2),  # Basse valeur
+                    # Jamais explore ET pas d'erreur -> priorite 0
+                    (and_(snapshot_with_price.c.card_id.is_(None), Card.error_count == 0), 0),
+                    # Erreur < max_retries (avec ou sans snapshot) -> priorite 1
+                    (and_(Card.error_count > 0, Card.error_count < max_error_retries), 1),
+                    # Trop d'erreurs (avec ou sans snapshot) -> priorite 2
+                    (Card.error_count >= max_error_retries, 2),
+                    # Basse valeur -> priorite 2
+                    (snapshot_with_price.c.anchor_price < low_value_threshold, 2),
                     else_=3  # Haute valeur normale
                 ),
                 snapshot_with_price.c.as_of_date.asc().nullsfirst()  # Plus ancien d'abord

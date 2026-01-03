@@ -516,6 +516,8 @@ class EbayWorker:
             meta["removed_count"] = result.stats.removed_count
             meta["mean"] = result.stats.mean
             meta["std"] = result.stats.std
+            meta["min_price"] = result.stats.min_price
+            meta["max_price"] = result.stats.max_price
             # Nouveaux indicateurs enrichis
             meta["p10"] = result.stats.p10
             meta["p90"] = result.stats.p90
@@ -563,6 +565,11 @@ class EbayWorker:
                 }
                 for item in result.reverse_items[:100]
             ]
+        # Stats reverse
+        if result.reverse_stats:
+            meta["reverse_mean"] = result.reverse_stats.mean
+            meta["reverse_min_price"] = result.reverse_stats.min_price
+            meta["reverse_max_price"] = result.reverse_stats.max_price
 
         # Stocker les annonces graded separement
         if result.graded_items:
@@ -582,6 +589,11 @@ class EbayWorker:
                 }
                 for item in result.graded_items[:100]
             ]
+        # Stats graded
+        if result.graded_stats:
+            meta["graded_mean"] = result.graded_stats.mean
+            meta["graded_min_price"] = result.graded_stats.min_price
+            meta["graded_max_price"] = result.graded_stats.max_price
 
         snapshot.set_raw_meta(meta)
 

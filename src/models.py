@@ -324,6 +324,64 @@ class MarketSnapshot(Base):
             return json.loads(self.raw_meta)
         return {}
 
+    def get_computed_stats(self) -> dict:
+        """Retourne les stats avec min/max/mean calcules depuis les listings si non disponibles."""
+        meta = self.get_raw_meta()
+        result = {
+            "min_price": meta.get("min_price"),
+            "max_price": meta.get("max_price"),
+            "mean": meta.get("mean"),
+            "reverse_min_price": meta.get("reverse_min_price"),
+            "reverse_max_price": meta.get("reverse_max_price"),
+            "reverse_mean": meta.get("reverse_mean"),
+            "graded_min_price": meta.get("graded_min_price"),
+            "graded_max_price": meta.get("graded_max_price"),
+            "graded_mean": meta.get("graded_mean"),
+        }
+
+        # Calculer depuis les listings si non disponible
+        def calc_from_listings(listings_key: str):
+            listings = meta.get(listings_key, [])
+            if not listings:
+                return None, None, None
+            prices = [l.get("effective_price") or l.get("price") for l in listings
+                      if l.get("effective_price") or l.get("price")]
+            if not prices:
+                return None, None, None
+            return min(prices), max(prices), sum(prices) / len(prices)
+
+        # Normal
+        if result["min_price"] is None or result["max_price"] is None:
+            min_p, max_p, mean_p = calc_from_listings("listings")
+            if result["min_price"] is None:
+                result["min_price"] = min_p
+            if result["max_price"] is None:
+                result["max_price"] = max_p
+            if result["mean"] is None:
+                result["mean"] = mean_p
+
+        # Reverse
+        if result["reverse_min_price"] is None or result["reverse_max_price"] is None:
+            min_p, max_p, mean_p = calc_from_listings("reverse_listings")
+            if result["reverse_min_price"] is None:
+                result["reverse_min_price"] = min_p
+            if result["reverse_max_price"] is None:
+                result["reverse_max_price"] = max_p
+            if result["reverse_mean"] is None:
+                result["reverse_mean"] = mean_p
+
+        # Graded
+        if result["graded_min_price"] is None or result["graded_max_price"] is None:
+            min_p, max_p, mean_p = calc_from_listings("graded_listings")
+            if result["graded_min_price"] is None:
+                result["graded_min_price"] = min_p
+            if result["graded_max_price"] is None:
+                result["graded_max_price"] = max_p
+            if result["graded_mean"] is None:
+                result["graded_mean"] = mean_p
+
+        return result
+
     def __repr__(self) -> str:
         return f"<MarketSnapshot card_id={self.card_id} date={self.as_of_date}>"
 

@@ -26,7 +26,7 @@ from src.database import get_session
 from src.models import Settings
 from src.ebay.usage_tracker import (
     is_rate_limited, get_rate_limited_info,
-    refresh_rate_limits_from_ebay, get_ebay_remaining
+    refresh_rate_limits_from_ebay
 )
 
 
@@ -76,26 +76,19 @@ def main():
         rate_limits = refresh_rate_limits_from_ebay()
 
         if rate_limits:
-            ebay_remaining = rate_limits.get('remaining', 0)
-            ebay_limit = rate_limits.get('limit', 5000)
             ebay_count = rate_limits.get('count', 0)
-            log(f"Rate limits eBay: {ebay_remaining}/{ebay_limit} restants")
+            ebay_limit = rate_limits.get('limit', 5000)
+            log(f"eBay: {ebay_count}/{ebay_limit} utilisés")
 
-            if ebay_remaining <= 0:
-                log(f"Limite eBay atteinte ({ebay_count}/{ebay_limit}), skip")
+            # Verifier si la limite configuree est deja atteinte
+            remaining = daily_limit - ebay_count
+            log(f"Limite configurée: {daily_limit} -> {remaining} appels possibles")
+
+            if remaining <= 0:
+                log(f"Limite configurée atteinte ({ebay_count} >= {daily_limit}), skip")
                 return
-
-        # Verifier aussi la limite configuree (compteur interne)
-        from src.ebay.usage_tracker import get_ebay_usage_summary
-        usage = get_ebay_usage_summary(session)
-        today_count = usage.get('today_count', 0)
-        remaining = daily_limit - today_count
-
-        log(f"Limite configuree: {today_count}/{daily_limit} (restants: {remaining})")
-
-        if remaining <= 0:
-            log(f"Limite configuree atteinte ({today_count}/{daily_limit}), skip")
-            return
+        else:
+            log("Impossible de récupérer le compteur eBay")
 
         # Lancer le batch avec priorisation des cartes anciennes
         from src.batch.runner import BatchRunner

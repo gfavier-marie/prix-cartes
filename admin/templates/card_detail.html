@@ -142,6 +142,226 @@
         <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Annonces eBay</h2>
         <button id="refresh-listings" onclick="loadListings(true)" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">Actualiser</button>
     </div>
+
+    {% if snapshots and snapshots|length > 0 %}
+    {% set snap = snapshots[0] %}
+
+    <!-- Normal Stats Panel -->
+    {% if snap.sample_size and snap.sample_size > 0 %}
+    {% set meta = snap.get_computed_stats() %}
+    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+        <h3 class="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-3 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+            Normal ({{ snap.sample_size }} annonces)
+        </h3>
+        <!-- Stats de base : min, max, moyenne, mediane -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3 pb-3 border-b border-blue-200 dark:border-blue-800">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Min</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.min_price) if meta.min_price else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Max</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.max_price) if meta.max_price else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Moyenne</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.mean) if meta.mean else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Mediane</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p50) if snap.p50 else '-' }} &euro;</span>
+            </div>
+        </div>
+        <!-- Percentiles -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p10</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p10) if snap.p10 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p20</span>
+                <span class="ml-2 font-mono font-semibold text-blue-600 dark:text-blue-400">{{ "%.2f"|format(snap.p20) if snap.p20 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p50</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p50) if snap.p50 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p80</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p80) if snap.p80 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p90</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.p90) if snap.p90 else '-' }} &euro;</span>
+            </div>
+        </div>
+        <!-- Indicateurs qualite -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Dispersion</span>
+                <span class="ml-2 font-mono font-medium {% if snap.dispersion and snap.dispersion > 4 %}text-red-500{% else %}text-gray-900 dark:text-white{% endif %}">{{ "%.2f"|format(snap.dispersion) if snap.dispersion else '-' }}</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">CV</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.cv) if snap.cv else '-' }}</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Consensus</span>
+                <span class="ml-2 font-mono font-medium {% if snap.consensus_score and snap.consensus_score >= 70 %}text-green-600{% elif snap.consensus_score and snap.consensus_score < 50 %}text-red-500{% else %}text-gray-900 dark:text-white{% endif %}">{{ "%.0f"|format(snap.consensus_score) if snap.consensus_score else '-' }}%</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Age med.</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.0f"|format(snap.age_median_days) if snap.age_median_days else '-' }}j</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Reverse Stats Panel -->
+    {% if snap.reverse_sample_size and snap.reverse_sample_size > 0 %}
+    <div class="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 mb-4">
+        <h3 class="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-3 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+            Reverse ({{ snap.reverse_sample_size }} annonces)
+        </h3>
+        <!-- Stats de base : min, max, moyenne, mediane -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3 pb-3 border-b border-purple-200 dark:border-purple-800">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Min</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.reverse_min_price) if meta.reverse_min_price else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Max</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.reverse_max_price) if meta.reverse_max_price else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Moyenne</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.reverse_mean) if meta.reverse_mean else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Mediane</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.reverse_p50) if snap.reverse_p50 else '-' }} &euro;</span>
+            </div>
+        </div>
+        <!-- Percentiles -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p10</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.reverse_p10) if snap.reverse_p10 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p20</span>
+                <span class="ml-2 font-mono font-semibold text-purple-600 dark:text-purple-400">{{ "%.2f"|format(snap.reverse_p20) if snap.reverse_p20 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p50</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.reverse_p50) if snap.reverse_p50 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p80</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.reverse_p80) if snap.reverse_p80 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p90</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.reverse_p90) if snap.reverse_p90 else '-' }} &euro;</span>
+            </div>
+        </div>
+        <!-- Indicateurs qualite -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-purple-200 dark:border-purple-800">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Dispersion</span>
+                <span class="ml-2 font-mono font-medium {% if snap.reverse_dispersion and snap.reverse_dispersion > 4 %}text-red-500{% else %}text-gray-900 dark:text-white{% endif %}">{{ "%.2f"|format(snap.reverse_dispersion) if snap.reverse_dispersion else '-' }}</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">CV</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.reverse_cv) if snap.reverse_cv else '-' }}</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Consensus</span>
+                <span class="ml-2 font-mono font-medium {% if snap.reverse_consensus_score and snap.reverse_consensus_score >= 70 %}text-green-600{% elif snap.reverse_consensus_score and snap.reverse_consensus_score < 50 %}text-red-500{% else %}text-gray-900 dark:text-white{% endif %}">{{ "%.0f"|format(snap.reverse_consensus_score) if snap.reverse_consensus_score else '-' }}%</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Age med.</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.0f"|format(snap.reverse_age_median_days) if snap.reverse_age_median_days else '-' }}j</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Graded Stats Panel -->
+    {% if snap.graded_sample_size and snap.graded_sample_size > 0 %}
+    <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
+        <h3 class="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-3 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+            Graded ({{ snap.graded_sample_size }} annonces)
+        </h3>
+        <!-- Stats de base : min, max, moyenne, mediane -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3 pb-3 border-b border-amber-200 dark:border-amber-800">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Min</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.graded_min_price) if meta.graded_min_price else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Max</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.graded_max_price) if meta.graded_max_price else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Moyenne</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(meta.graded_mean) if meta.graded_mean else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Mediane</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.graded_p50) if snap.graded_p50 else '-' }} &euro;</span>
+            </div>
+        </div>
+        <!-- Percentiles -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-sm">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p10</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.graded_p10) if snap.graded_p10 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p20</span>
+                <span class="ml-2 font-mono font-semibold text-amber-600 dark:text-amber-400">{{ "%.2f"|format(snap.graded_p20) if snap.graded_p20 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p50</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.graded_p50) if snap.graded_p50 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p80</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.graded_p80) if snap.graded_p80 else '-' }} &euro;</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">p90</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.graded_p90) if snap.graded_p90 else '-' }} &euro;</span>
+            </div>
+        </div>
+        <!-- Indicateurs qualite -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-amber-200 dark:border-amber-800">
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Dispersion</span>
+                <span class="ml-2 font-mono font-medium {% if snap.graded_dispersion and snap.graded_dispersion > 4 %}text-red-500{% else %}text-gray-900 dark:text-white{% endif %}">{{ "%.2f"|format(snap.graded_dispersion) if snap.graded_dispersion else '-' }}</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">CV</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.2f"|format(snap.graded_cv) if snap.graded_cv else '-' }}</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Consensus</span>
+                <span class="ml-2 font-mono font-medium {% if snap.graded_consensus_score and snap.graded_consensus_score >= 70 %}text-green-600{% elif snap.graded_consensus_score and snap.graded_consensus_score < 50 %}text-red-500{% else %}text-gray-900 dark:text-white{% endif %}">{{ "%.0f"|format(snap.graded_consensus_score) if snap.graded_consensus_score else '-' }}%</span>
+            </div>
+            <div>
+                <span class="text-gray-500 dark:text-gray-400">Age med.</span>
+                <span class="ml-2 font-mono font-medium text-gray-900 dark:text-white">{{ "%.0f"|format(snap.graded_age_median_days) if snap.graded_age_median_days else '-' }}j</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% endif %}
+
     <div id="listings-container"><div class="text-center py-12 text-gray-500 dark:text-gray-400">Chargement...</div></div>
 </div>
 
@@ -160,22 +380,28 @@
         </div>
     </div>
     <div class="overflow-x-auto max-h-80">
-        <table class="w-full min-w-[600px]">
+        <table class="w-full min-w-[650px]">
             <thead><tr class="border-b border-gray-200 dark:border-dark-500">
                 <th class="w-14 px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Photo</th>
-                <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th>
                 <th class="w-24 px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Prix</th>
+                <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th>
                 <th class="w-16 px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Duree</th>
                 <th class="w-20 px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Date</th>
+                <th class="w-16 px-3 py-2"></th>
             </tr></thead>
             <tbody class="divide-y divide-gray-100 dark:divide-dark-500">
             {% for sold in sold_listings %}
+            {% set shipping = (sold.effective_price or 0) - (sold.price or 0) if sold.price else 0 %}
             <tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
                 <td class="px-3 py-2">{% if sold.image_url %}<img src="{{ sold.image_url }}" onclick="openPhotoModal('{{ sold.image_url }}')" class="w-10 h-10 object-contain rounded bg-gray-100 dark:bg-dark-600 cursor-pointer">{% endif %}</td>
+                <td class="px-3 py-2 text-right">
+                    <div class="font-semibold text-green-600 dark:text-green-400 tabular-nums">{{ "%.2f"|format(sold.price or sold.effective_price or 0) }} &euro;</div>
+                    {% if shipping > 0 %}<div class="text-xs text-gray-500">+{{ "%.2f"|format(shipping) }}</div>{% endif %}
+                </td>
                 <td class="px-3 py-2 max-w-[180px]"><div class="truncate text-sm text-gray-900 dark:text-white">{{ sold.title or '-' }}</div></td>
-                <td class="px-3 py-2 text-right font-semibold text-green-600 dark:text-green-400 tabular-nums">{{ "%.2f"|format(sold.effective_price or 0) }} &euro;</td>
                 <td class="px-3 py-2 text-center text-sm font-mono {% if sold.duration_days is not none and sold.duration_days <= 7 %}text-green-600{% else %}text-gray-500{% endif %}">{% if sold.duration_days is not none %}{{ sold.duration_days }}j{% else %}-{% endif %}</td>
                 <td class="px-3 py-2 text-center text-xs text-gray-500 font-mono">{{ sold.detected_sold_at.strftime('%d/%m/%y') }}</td>
+                <td class="px-3 py-2">{% if sold.url %}<a href="{{ sold.url }}" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline">Voir</a>{% endif %}</td>
             </tr>
             {% endfor %}
             </tbody>
@@ -224,6 +450,8 @@
 <script>
 const cardId = {{ card.id }};
 let currentListings = [];
+let currentReverseListings = [];
+let currentGradedListings = [];
 
 document.getElementById('card-info-form').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -270,22 +498,71 @@ function closePhotoModal() {
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePhotoModal(); });
 
+function formatListingDate(dateStr) {
+    if (!dateStr) return '-';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    } catch { return dateStr; }
+}
+
 function renderListings() {
     const container = document.getElementById('listings-container');
-    if (currentListings.length === 0) {
+    if (currentListings.length === 0 && currentReverseListings.length === 0 && currentGradedListings.length === 0) {
         container.innerHTML = '<div class="text-center py-12 text-gray-500">Aucune annonce. Cliquez Actualiser.</div>';
         return;
     }
-    let html = '<div class="overflow-x-auto max-h-80"><table class="w-full min-w-[500px]"><thead><tr class="border-b border-gray-200 dark:border-dark-500"><th class="w-14 px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Photo</th><th class="w-24 px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Prix</th><th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th><th class="w-16 px-3 py-2"></th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-dark-500">';
-    for (const l of currentListings) {
-        html += `<tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
-            <td class="px-3 py-2">${l.image ? `<img src="${l.image}" onclick="openPhotoModal('${l.image}')" class="w-10 h-10 object-contain rounded bg-gray-100 dark:bg-dark-600 cursor-pointer">` : ''}</td>
-            <td class="px-3 py-2 text-right"><div class="font-semibold text-gray-900 dark:text-white tabular-nums">${(l.price||0).toFixed(2)} &euro;</div>${l.shipping > 0 ? `<div class="text-xs text-gray-500">+${l.shipping.toFixed(2)}</div>` : ''}</td>
-            <td class="px-3 py-2 max-w-[180px]"><div class="truncate text-sm text-gray-900 dark:text-white">${l.title || '-'}</div></td>
-            <td class="px-3 py-2">${l.url ? `<a href="${l.url}" target="_blank" class="text-xs text-blue-600">Voir</a>` : ''}</td>
-        </tr>`;
+    let html = '';
+
+    // Normal listings
+    if (currentListings.length > 0) {
+        html += '<h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Normal (' + currentListings.length + ')</h3>';
+        html += '<div class="overflow-x-auto max-h-60 mb-4"><table class="w-full min-w-[600px]"><thead><tr class="border-b border-gray-200 dark:border-dark-500"><th class="w-14 px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Photo</th><th class="w-24 px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Prix</th><th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th><th class="w-20 px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Date</th><th class="w-16 px-3 py-2"></th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-dark-500">';
+        for (const l of currentListings) {
+            html += `<tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
+                <td class="px-3 py-2">${l.image ? `<img src="${l.image}" onclick="openPhotoModal('${l.image}')" class="w-10 h-10 object-contain rounded bg-gray-100 dark:bg-dark-600 cursor-pointer">` : ''}</td>
+                <td class="px-3 py-2 text-right"><div class="font-semibold text-gray-900 dark:text-white tabular-nums">${(l.price||0).toFixed(2)} &euro;</div>${l.shipping > 0 ? `<div class="text-xs text-gray-500">+${l.shipping.toFixed(2)}</div>` : ''}</td>
+                <td class="px-3 py-2 max-w-[180px]"><div class="truncate text-sm text-gray-900 dark:text-white">${l.title || '-'}</div></td>
+                <td class="px-3 py-2 text-center text-xs text-gray-500 font-mono">${formatListingDate(l.listing_date)}</td>
+                <td class="px-3 py-2">${l.url ? `<a href="${l.url}" target="_blank" class="text-xs text-blue-600">Voir</a>` : ''}</td>
+            </tr>`;
+        }
+        html += '</tbody></table></div>';
     }
-    html += '</tbody></table></div>';
+
+    // Reverse listings
+    if (currentReverseListings.length > 0) {
+        html += '<h3 class="text-sm font-semibold text-purple-600 dark:text-purple-400 mb-2">Reverse (' + currentReverseListings.length + ')</h3>';
+        html += '<div class="overflow-x-auto max-h-60 mb-4"><table class="w-full min-w-[600px]"><thead><tr class="border-b border-gray-200 dark:border-dark-500"><th class="w-14 px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Photo</th><th class="w-24 px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Prix</th><th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th><th class="w-20 px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Date</th><th class="w-16 px-3 py-2"></th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-dark-500">';
+        for (const l of currentReverseListings) {
+            html += `<tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
+                <td class="px-3 py-2">${l.image ? `<img src="${l.image}" onclick="openPhotoModal('${l.image}')" class="w-10 h-10 object-contain rounded bg-gray-100 dark:bg-dark-600 cursor-pointer">` : ''}</td>
+                <td class="px-3 py-2 text-right"><div class="font-semibold text-gray-900 dark:text-white tabular-nums">${(l.price||0).toFixed(2)} &euro;</div>${l.shipping > 0 ? `<div class="text-xs text-gray-500">+${l.shipping.toFixed(2)}</div>` : ''}</td>
+                <td class="px-3 py-2 max-w-[180px]"><div class="truncate text-sm text-gray-900 dark:text-white">${l.title || '-'}</div></td>
+                <td class="px-3 py-2 text-center text-xs text-gray-500 font-mono">${formatListingDate(l.listing_date)}</td>
+                <td class="px-3 py-2">${l.url ? `<a href="${l.url}" target="_blank" class="text-xs text-blue-600">Voir</a>` : ''}</td>
+            </tr>`;
+        }
+        html += '</tbody></table></div>';
+    }
+
+    // Graded listings
+    if (currentGradedListings.length > 0) {
+        html += '<h3 class="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-2">Graded (' + currentGradedListings.length + ')</h3>';
+        html += '<div class="overflow-x-auto max-h-60"><table class="w-full min-w-[600px]"><thead><tr class="border-b border-gray-200 dark:border-dark-500"><th class="w-14 px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Photo</th><th class="w-24 px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Prix</th><th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Titre</th><th class="w-20 px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Date</th><th class="w-16 px-3 py-2"></th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-dark-500">';
+        for (const l of currentGradedListings) {
+            html += `<tr class="hover:bg-gray-50 dark:hover:bg-dark-600">
+                <td class="px-3 py-2">${l.image ? `<img src="${l.image}" onclick="openPhotoModal('${l.image}')" class="w-10 h-10 object-contain rounded bg-gray-100 dark:bg-dark-600 cursor-pointer">` : ''}</td>
+                <td class="px-3 py-2 text-right"><div class="font-semibold text-gray-900 dark:text-white tabular-nums">${(l.price||0).toFixed(2)} &euro;</div>${l.shipping > 0 ? `<div class="text-xs text-gray-500">+${l.shipping.toFixed(2)}</div>` : ''}</td>
+                <td class="px-3 py-2 max-w-[180px]"><div class="truncate text-sm text-gray-900 dark:text-white">${l.title || '-'}</div></td>
+                <td class="px-3 py-2 text-center text-xs text-gray-500 font-mono">${formatListingDate(l.listing_date)}</td>
+                <td class="px-3 py-2">${l.url ? `<a href="${l.url}" target="_blank" class="text-xs text-blue-600">Voir</a>` : ''}</td>
+            </tr>`;
+        }
+        html += '</tbody></table></div>';
+    }
+
     container.innerHTML = html;
 }
 
@@ -299,6 +576,8 @@ async function loadListings(refresh = false) {
         const data = await response.json();
         if (!data.success) { container.innerHTML = `<div class="text-center py-12 text-red-500">${data.error || 'Erreur'}</div>`; return; }
         currentListings = (data.listings || []).sort((a, b) => (a.effective_price || a.price || 0) - (b.effective_price || b.price || 0));
+        currentReverseListings = (data.reverse_listings || []).sort((a, b) => (a.effective_price || a.price || 0) - (b.effective_price || b.price || 0));
+        currentGradedListings = (data.graded_listings || []).sort((a, b) => (a.effective_price || a.price || 0) - (b.effective_price || b.price || 0));
         renderListings();
     } catch (error) { container.innerHTML = `<div class="text-center py-12 text-red-500">Erreur: ${error.message}</div>`; }
     finally { btn.disabled = false; btn.textContent = 'Actualiser'; }
