@@ -174,6 +174,73 @@
     </div>
 </div>
 
+<!-- Export des annonces -->
+<div class="bg-white dark:bg-dark-700 rounded-lg shadow-sm mt-6 overflow-hidden">
+    <div class="p-4 border-b border-gray-200 dark:border-dark-600">
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Export des annonces eBay</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Exporter les annonces du dernier snapshot par série/set avec filtres de prix</p>
+    </div>
+
+    <div class="p-4 space-y-4">
+        <!-- Sélection série -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Série</label>
+            <select id="export-series" onchange="onSeriesChange()"
+                    class="w-full max-w-xs px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+                <option value="">Toutes les séries</option>
+            </select>
+        </div>
+
+        <!-- Sélection sets (multi-select) -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Sets (optionnel)</label>
+            <div id="export-sets-container" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-gray-50 dark:bg-dark-600 rounded-lg border border-gray-300 dark:border-dark-500">
+                <span class="text-sm text-gray-500 dark:text-gray-400">Sélectionnez une série pour voir les sets</span>
+            </div>
+        </div>
+
+        <!-- Filtres prix -->
+        <div class="flex flex-wrap gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prix min (€)</label>
+                <input type="number" id="export-price-min" min="0" step="0.01" placeholder="0"
+                       class="w-28 px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prix max (€)</label>
+                <input type="number" id="export-price-max" min="0" step="0.01" placeholder="∞"
+                       class="w-28 px-3 py-2 bg-gray-50 dark:bg-dark-600 border border-gray-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500">
+            </div>
+        </div>
+
+        <!-- Types de listings -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Types d'annonces</label>
+            <div class="flex flex-wrap gap-4">
+                <label class="inline-flex items-center">
+                    <input type="checkbox" id="export-type-normal" checked class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Normal</span>
+                </label>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" id="export-type-reverse" checked class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Reverse</span>
+                </label>
+                <label class="inline-flex items-center">
+                    <input type="checkbox" id="export-type-graded" checked class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Graded (PSA/CGC)</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Bouton export -->
+        <div class="pt-2">
+            <button onclick="exportListings()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors">
+                Exporter CSV
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Résultats d'import -->
 <div id="import-results" class="hidden bg-white dark:bg-dark-700 rounded-lg shadow-sm mt-6 overflow-hidden">
     <div class="p-4 border-b border-gray-200 dark:border-dark-600">
@@ -243,6 +310,7 @@
     let setsData = [];
     let currentTab = 'series';
     let dataLoaded = { series: false, sets: false };
+    let exportSeriesData = [];  // Pour l'export
 
     function switchTab(tab) {
         currentTab = tab;
@@ -578,5 +646,89 @@
         `;
         btn.textContent = 'Import terminé';
     }
+
+    // === Export des annonces ===
+
+    function loadExportSeries() {
+        fetch('/api/tcgdex/series')
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) return;
+                exportSeriesData = data.series.filter(s => s.is_visible);
+                const select = document.getElementById('export-series');
+                exportSeriesData.forEach(serie => {
+                    const opt = document.createElement('option');
+                    opt.value = serie.serie_id;
+                    opt.textContent = `${serie.serie_name} (${serie.set_count} sets)`;
+                    select.appendChild(opt);
+                });
+            });
+    }
+
+    function onSeriesChange() {
+        const serieId = document.getElementById('export-series').value;
+        const container = document.getElementById('export-sets-container');
+
+        if (!serieId) {
+            container.innerHTML = '<span class="text-sm text-gray-500 dark:text-gray-400">Sélectionnez une série pour voir les sets</span>';
+            return;
+        }
+
+        // Charger les sets de cette série
+        fetch('/api/tcgdex/sets')
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) return;
+                const setsInSerie = data.sets.filter(s => s.serie_id === serieId && s.is_visible && !s.hidden_by_serie);
+
+                if (setsInSerie.length === 0) {
+                    container.innerHTML = '<span class="text-sm text-gray-500 dark:text-gray-400">Aucun set visible dans cette série</span>';
+                    return;
+                }
+
+                container.innerHTML = setsInSerie.map(set => `
+                    <label class="inline-flex items-center px-2 py-1 bg-white dark:bg-dark-700 rounded border border-gray-200 dark:border-dark-500 cursor-pointer hover:bg-gray-100 dark:hover:bg-dark-600">
+                        <input type="checkbox" class="export-set-cb w-3 h-3 text-blue-600 border-gray-300 rounded" value="${set.set_id}">
+                        <span class="ml-1.5 text-xs text-gray-700 dark:text-gray-300">${set.name}</span>
+                    </label>
+                `).join('');
+            });
+    }
+
+    function exportListings() {
+        const series = document.getElementById('export-series').value;
+        const priceMin = document.getElementById('export-price-min').value;
+        const priceMax = document.getElementById('export-price-max').value;
+
+        // Récupérer les sets sélectionnés
+        const selectedSets = Array.from(document.querySelectorAll('.export-set-cb:checked')).map(cb => cb.value);
+
+        // Récupérer les types
+        const types = [];
+        if (document.getElementById('export-type-normal').checked) types.push('normal');
+        if (document.getElementById('export-type-reverse').checked) types.push('reverse');
+        if (document.getElementById('export-type-graded').checked) types.push('graded');
+
+        if (types.length === 0) {
+            showToast('Sélectionnez au moins un type d\'annonce', 'error');
+            return;
+        }
+
+        // Construire l'URL
+        const params = new URLSearchParams();
+        if (series) params.set('series', series);
+        if (selectedSets.length > 0) params.set('sets', selectedSets.join(','));
+        if (priceMin) params.set('price_min', priceMin);
+        if (priceMax) params.set('price_max', priceMax);
+        params.set('types', types.join(','));
+
+        // Télécharger
+        window.location.href = '/export/listings?' + params.toString();
+    }
+
+    // Charger les séries pour l'export au chargement de la page
+    document.addEventListener('DOMContentLoaded', function() {
+        loadExportSeries();
+    });
 </script>
 {% endblock %}

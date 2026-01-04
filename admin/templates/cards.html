@@ -3,7 +3,24 @@
 {% block title %}Cartes{% endblock %}
 
 {% block content %}
-{% set filter_params = "search=" ~ search ~ "&has_data=" ~ has_data ~ "&set=" ~ set_filter ~ "&date_filter=" ~ date_filter ~ "&date_from=" ~ date_from ~ "&date_to=" ~ date_to ~ "&months_ago=" ~ months_ago ~ "&has_error=" ~ has_error ~ "&error_hours=" ~ error_hours %}
+{% set base_params = "search=" ~ search ~ "&has_data=" ~ has_data ~ "&set=" ~ set_filter ~ "&date_filter=" ~ date_filter ~ "&date_from=" ~ date_from ~ "&date_to=" ~ date_to ~ "&months_ago=" ~ months_ago ~ "&has_error=" ~ has_error ~ "&error_hours=" ~ error_hours %}
+{% set filter_params = base_params ~ "&sort=" ~ sort_by ~ "&order=" ~ sort_order %}
+{% macro sort_header(column, label, base, current_sort, current_order) %}
+{% set next_order = 'desc' if current_sort == column and current_order == 'asc' else 'asc' %}
+<a href="?page=1&{{ base }}&sort={{ column }}&order={{ next_order }}"
+   class="group inline-flex items-center gap-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+    {{ label }}
+    {% if current_sort == column %}
+        {% if current_order == 'asc' %}
+        <svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/></svg>
+        {% else %}
+        <svg class="w-3 h-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        {% endif %}
+    {% else %}
+        <svg class="w-3 h-3 text-gray-300 dark:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+    {% endif %}
+</a>
+{% endmacro %}
 
 <!-- Page Header -->
 <div class="mb-6">
@@ -195,17 +212,17 @@
             <thead>
                 <tr class="border-b border-gray-200 dark:border-dark-500 bg-gray-50 dark:bg-dark-600">
                     <th class="w-14 px-3 py-3"></th>
-                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Carte</th>
-                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Set</th>
+                    <th class="px-3 py-3 text-left">{{ sort_header('name', 'Carte', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-left">{{ sort_header('set', 'Set', base_params, sort_by, sort_order) }}</th>
                     <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Variant</th>
-                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">p20</th>
-                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">p50</th>
-                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">p80</th>
-                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ann.</th>
-                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Disp.</th>
-                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Age</th>
-                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Maj</th>
-                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ventes</th>
+                    <th class="px-3 py-3 text-right">{{ sort_header('p20', 'p20', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-right">{{ sort_header('p50', 'p50', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-right">{{ sort_header('p80', 'p80', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-center">{{ sort_header('sample', 'Ann.', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-center">{{ sort_header('dispersion', 'Disp.', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-center">{{ sort_header('age', 'Age', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-center">{{ sort_header('updated', 'Maj', base_params, sort_by, sort_order) }}</th>
+                    <th class="px-3 py-3 text-center">{{ sort_header('sold', 'Ventes', base_params, sort_by, sort_order) }}</th>
                     <th class="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Erreur</th>
                     <th class="px-3 py-3 w-24"></th>
                 </tr>

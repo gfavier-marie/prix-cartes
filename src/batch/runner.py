@@ -438,10 +438,10 @@ class BatchRunner:
                 func.max(MarketSnapshot.as_of_date).label('last_snapshot_date')
             ).group_by(MarketSnapshot.card_id).subquery()
 
-            # Subquery pour recuperer l'anchor_price du dernier snapshot
+            # Subquery pour recuperer le p50 du dernier snapshot
             snapshot_with_price = session.query(
                 MarketSnapshot.card_id,
-                MarketSnapshot.anchor_price,
+                MarketSnapshot.p50,
                 MarketSnapshot.as_of_date
             ).join(
                 latest_snapshot,
@@ -506,15 +506,15 @@ class BatchRunner:
                     # Basse valeur -> cooldown X jours
                     and_(
                         Card.error_count < max_error_retries,
-                        snapshot_with_price.c.anchor_price < low_value_threshold,
+                        snapshot_with_price.c.p50 < low_value_threshold,
                         snapshot_with_price.c.as_of_date < low_value_cooldown
                     ),
                     # Haute valeur -> toujours inclus (sera trie par anciennete)
                     and_(
                         Card.error_count < max_error_retries,
                         or_(
-                            snapshot_with_price.c.anchor_price >= low_value_threshold,
-                            snapshot_with_price.c.anchor_price.is_(None)
+                            snapshot_with_price.c.p50 >= low_value_threshold,
+                            snapshot_with_price.c.p50.is_(None)
                         )
                     ),
                 )
@@ -528,7 +528,7 @@ class BatchRunner:
                     # Trop d'erreurs (avec ou sans snapshot) -> priorite 2
                     (Card.error_count >= max_error_retries, 2),
                     # Basse valeur -> priorite 2
-                    (snapshot_with_price.c.anchor_price < low_value_threshold, 2),
+                    (snapshot_with_price.c.p50 < low_value_threshold, 2),
                     else_=3  # Haute valeur normale
                 ),
                 snapshot_with_price.c.as_of_date.asc().nullsfirst()  # Plus ancien d'abord

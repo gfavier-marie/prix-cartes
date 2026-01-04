@@ -4,6 +4,7 @@ Interface admin Flask pour gerer les prix et les overrides.
 
 from datetime import datetime
 from pathlib import Path
+import re
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response
 import csv
@@ -116,7 +117,7 @@ def create_app() -> Flask:
     @app.route("/cards")
     def cards_list():
         """Liste des cartes avec filtres."""
-        from sqlalchemy import func
+        from sqlalchemy import func, or_
         from datetime import date, timedelta
         from dateutil.relativedelta import relativedelta
 
@@ -124,6 +125,7 @@ def create_app() -> Flask:
         per_page = 50
         search = request.args.get("search", "")
         set_filter = request.args.get("set", "")
+        serie_filter = request.args.get("serie", "")
         has_data = request.args.get("has_data", "")
 
         # Filtres de date
@@ -135,6 +137,10 @@ def create_app() -> Flask:
         # Filtre erreur
         has_error = request.args.get("has_error", "")
         error_hours = request.args.get("error_hours", "")
+
+        # Tri
+        sort_by = request.args.get("sort", "")
+        sort_order = request.args.get("order", "asc")
 
         with get_session() as session:
             # Subquery pour le dernier snapshot par carte
@@ -163,14 +169,59 @@ def create_app() -> Flask:
 
             # Filtres
             if search:
-                query = query.filter(
-                    (Card.name.ilike(f"%{search}%")) |
-                    (Card.set_name.ilike(f"%{search}%")) |
-                    (Card.tcgdex_id.ilike(f"%{search}%"))
-                )
+                # Pattern pour numero de carte: "4/100" ou "4"
+                card_number_pattern = re.compile(r'^(\d+)(?:/(\d+))?$')
+
+                # Split sur espaces pour permettre plusieurs termes
+                terms = search.strip().split()
+
+                # Verifier si TOUS les termes sont des numeros de carte
+                card_matches = []
+                all_card_numbers = True
+                for term in terms:
+                    match = card_number_pattern.match(term)
+                    if match:
+                        card_matches.append(match)
+                    else:
+                        all_card_numbers = False
+                        break
+
+                if all_card_numbers and card_matches:
+                    # Tous les termes sont des numeros : construire OR filters
+                    filters = []
+                    for match in card_matches:
+                        local_id = match.group(1)
+                        card_count = match.group(2)
+                        if card_count:
+                            # Format "4/100" : cherche LOCAL_TOTAL avec card_number_full exact
+                            filters.append(
+                                (Card.card_number_format == CardNumberFormat.LOCAL_TOTAL) &
+                                (Card.card_number_full == f"{local_id}/{card_count}")
+                            )
+                        else:
+                            # Format "4" seul : cherche PROMO ou LOCAL_ONLY avec local_id exact
+                            filters.append(
+                                (Card.card_number_format.in_([CardNumberFormat.PROMO, CardNumberFormat.LOCAL_ONLY])) &
+                                (Card.local_id == local_id)
+                            )
+                    query = query.filter(or_(*filters))
+                else:
+                    # Recherche classique par nom/set/tcgdex_id
+                    query = query.filter(
+                        (Card.name.ilike(f"%{search}%")) |
+                        (Card.set_name.ilike(f"%{search}%")) |
+                        (Card.tcgdex_id.ilike(f"%{search}%"))
+                    )
 
             if set_filter:
                 query = query.filter(Card.set_id == set_filter)
+
+            if serie_filter:
+                # Recuperer tous les set_ids de la serie
+                set_ids_in_serie = session.query(Set.id).filter(Set.serie_id == serie_filter).all()
+                set_ids_in_serie = [s[0] for s in set_ids_in_serie]
+                if set_ids_in_serie:
+                    query = query.filter(Card.set_id.in_(set_ids_in_serie))
 
             if has_data == "yes":
                 query = query.filter(MarketSnapshot.id != None)
@@ -219,6 +270,26 @@ def create_app() -> Flask:
             elif has_error == "no":
                 query = query.filter(Card.last_error == None)
 
+            # Tri
+            sort_columns = {
+                'name': Card.name,
+                'set': Card.set_name,
+                'p20': MarketSnapshot.p20,
+                'p50': MarketSnapshot.p50,
+                'p80': MarketSnapshot.p80,
+                'sample': MarketSnapshot.sample_size,
+                'dispersion': MarketSnapshot.dispersion,
+                'age': MarketSnapshot.age_median_days,
+                'updated': MarketSnapshot.created_at,
+                'sold': sold_count_subq.c.sold_count,
+            }
+            if sort_by and sort_by in sort_columns:
+                col = sort_columns[sort_by]
+                if sort_order == 'desc':
+                    query = query.order_by(col.desc().nulls_last())
+                else:
+                    query = query.order_by(col.asc().nulls_last())
+
             total = query.count()
             results = query.offset((page - 1) * per_page).limit(per_page).all()
 
@@ -232,6 +303,7 @@ def create_app() -> Flask:
                 total=total,
                 search=search,
                 set_filter=set_filter,
+                serie_filter=serie_filter,
                 has_data=has_data,
                 date_filter=date_filter,
                 date_from=date_from,
@@ -240,6 +312,8 @@ def create_app() -> Flask:
                 has_error=has_error,
                 error_hours=error_hours,
                 series_sets=series_sets,
+                sort_by=sort_by,
+                sort_order=sort_order,
             )
 
     @app.route("/cards/<int:card_id>")
@@ -251,12 +325,15 @@ def create_app() -> Flask:
             'search': request.args.get('search', ''),
             'has_data': request.args.get('has_data', ''),
             'set': request.args.get('set', ''),
+            'serie': request.args.get('serie', ''),
             'date_filter': request.args.get('date_filter', ''),
             'date_from': request.args.get('date_from', ''),
             'date_to': request.args.get('date_to', ''),
             'months_ago': request.args.get('months_ago', ''),
             'has_error': request.args.get('has_error', ''),
             'error_hours': request.args.get('error_hours', ''),
+            'sort': request.args.get('sort', ''),
+            'order': request.args.get('order', ''),
         }
         # Construire l'URL de retour avec les filtres
         back_params = '&'.join(f'{k}={v}' for k, v in list_params.items() if v)
@@ -403,12 +480,15 @@ def create_app() -> Flask:
             'search': request.args.get('search', ''),
             'has_data': request.args.get('has_data', ''),
             'set': request.args.get('set', ''),
+            'serie': request.args.get('serie', ''),
             'date_filter': request.args.get('date_filter', ''),
             'date_from': request.args.get('date_from', ''),
             'date_to': request.args.get('date_to', ''),
             'months_ago': request.args.get('months_ago', ''),
             'has_error': request.args.get('has_error', ''),
             'error_hours': request.args.get('error_hours', ''),
+            'sort': request.args.get('sort', ''),
+            'order': request.args.get('order', ''),
         }
 
         runner = BatchRunner()
@@ -1030,11 +1110,18 @@ def create_app() -> Flask:
 
     @app.route("/export/csv")
     def export_csv():
-        """Export CSV de toutes les cartes avec statistiques eBay et ventes."""
+        """Export CSV de toutes les cartes avec statistiques eBay et ventes.
+
+        Paramètres optionnels:
+        - sets: liste de set_ids pour filtrer (ex: ?sets=base1&sets=base2)
+        """
         from sqlalchemy import func
         from collections import defaultdict
         from datetime import timedelta
         import numpy as np
+
+        # Filtrage optionnel par sets
+        set_ids = request.args.getlist('sets')
 
         output = io.StringIO()
         writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
@@ -1107,12 +1194,18 @@ def create_app() -> Flask:
             ).group_by(MarketSnapshot.card_id).subquery()
 
             # Query avec jointure - utilise l'ID pour éviter les duplications
-            results = session.query(Card, MarketSnapshot).outerjoin(
+            query = session.query(Card, MarketSnapshot).outerjoin(
                 latest_snapshot_id, Card.id == latest_snapshot_id.c.card_id
             ).outerjoin(
                 MarketSnapshot,
                 MarketSnapshot.id == latest_snapshot_id.c.max_id
-            ).filter(Card.is_active == True).order_by(Card.set_name, Card.local_id).all()
+            ).filter(Card.is_active == True)
+
+            # Filtre optionnel par sets
+            if set_ids:
+                query = query.filter(Card.set_id.in_(set_ids))
+
+            results = query.order_by(Card.set_name, Card.local_id).all()
 
             for card, snapshot in results:
                 # Stats ventes pour cette carte
@@ -1151,7 +1244,7 @@ def create_app() -> Flask:
                         v_pct_7d = f"{recent_count / len(dates) * 100:.0f}"
 
                 # Stats annonces: min/max/moy depuis le snapshot meta si dispo
-                a_count = snapshot.active_count if snapshot else 0
+                a_count = snapshot.sample_size if snapshot and snapshot.sample_size else 0
                 a_min = a_max = a_moy = ''
                 a_p10 = a_p20 = a_p50 = a_p80 = a_p90 = a_disp = a_cv = ''
                 if snapshot:
@@ -1164,7 +1257,7 @@ def create_app() -> Flask:
                             a_max = f"{max(listing_prices):.2f}"
                             a_moy = f"{sum(listing_prices) / len(listing_prices):.2f}"
                     # Percentiles seulement si >= 10 annonces
-                    if a_count and a_count >= 10:
+                    if a_count >= 10:
                         if snapshot.p10:
                             a_p10 = f"{snapshot.p10:.2f}"
                         if snapshot.p20:
@@ -1348,6 +1441,127 @@ def create_app() -> Flask:
                 'Content-Disposition': 'attachment; filename=modele_import.csv'
             }
         )
+
+    @app.route("/export/listings")
+    def export_listings():
+        """Export CSV des annonces eBay du dernier snapshot."""
+        from sqlalchemy.orm import joinedload
+        from sqlalchemy import func
+        import json
+
+        # Parametres
+        series_filter = request.args.get("series", "").strip()
+        sets_filter = request.args.get("sets", "").strip()
+        price_min = request.args.get("price_min", type=float)
+        price_max = request.args.get("price_max", type=float)
+        types_param = request.args.get("types", "normal,reverse,graded")
+        types_enabled = set(types_param.split(","))
+
+        with get_session() as session:
+            # Sous-requete pour obtenir le dernier snapshot par carte
+            latest_snapshot = session.query(
+                MarketSnapshot.card_id,
+                func.max(MarketSnapshot.as_of_date).label("max_date")
+            ).group_by(MarketSnapshot.card_id).subquery()
+
+            # Requete principale: cartes actives avec leur dernier snapshot
+            query = session.query(Card, MarketSnapshot).join(
+                latest_snapshot,
+                Card.id == latest_snapshot.c.card_id
+            ).join(
+                MarketSnapshot,
+                (MarketSnapshot.card_id == latest_snapshot.c.card_id) &
+                (MarketSnapshot.as_of_date == latest_snapshot.c.max_date)
+            ).options(
+                joinedload(Card.set_info)
+            ).filter(Card.is_active == True)
+
+            # Filtrer par serie
+            if series_filter:
+                query = query.join(Set, Card.set_id == Set.id).filter(Set.serie_id == series_filter)
+
+            # Filtrer par sets specifiques
+            if sets_filter:
+                set_ids = [s.strip() for s in sets_filter.split(",") if s.strip()]
+                if set_ids:
+                    query = query.filter(Card.set_id.in_(set_ids))
+
+            results = query.all()
+
+            # Construire les lignes CSV
+            output = io.StringIO()
+            writer = csv.writer(output, delimiter=';', quoting=csv.QUOTE_MINIMAL)
+
+            # Header
+            writer.writerow([
+                'tcgdex_id', 'card_name', 'set_id', 'set_name', 'serie_id',
+                'card_number', 'listing_type', 'title', 'effective_price',
+                'price_ht', 'shipping', 'currency', 'condition', 'seller',
+                'listing_date', 'url', 'image', 'snapshot_date'
+            ])
+
+            rows_written = 0
+            for card, snapshot in results:
+                meta = snapshot.get_raw_meta() if snapshot else {}
+                serie_id = card.set_info.serie_id if card.set_info else ""
+
+                # Collecter les listings par type
+                all_listings = []
+
+                if "normal" in types_enabled:
+                    for listing in meta.get("listings", []):
+                        all_listings.append(("normal", listing))
+
+                if "reverse" in types_enabled:
+                    for listing in meta.get("reverse_listings", []):
+                        all_listings.append(("reverse", listing))
+
+                if "graded" in types_enabled:
+                    for listing in meta.get("graded_listings", []):
+                        all_listings.append(("graded", listing))
+
+                for listing_type, listing in all_listings:
+                    effective_price = listing.get("effective_price", 0)
+
+                    # Filtrer par prix
+                    if price_min is not None and effective_price < price_min:
+                        continue
+                    if price_max is not None and effective_price > price_max:
+                        continue
+
+                    writer.writerow([
+                        card.tcgdex_id,
+                        card.effective_name,
+                        card.set_id,
+                        card.effective_set_name,
+                        serie_id,
+                        card.effective_card_number_full,
+                        listing_type,
+                        listing.get("title", ""),
+                        f"{effective_price:.2f}" if effective_price else "",
+                        f"{listing.get('price', 0):.2f}" if listing.get('price') else "",
+                        f"{listing.get('shipping', 0):.2f}" if listing.get('shipping') else "",
+                        listing.get("currency", ""),
+                        listing.get("condition", ""),
+                        listing.get("seller", ""),
+                        listing.get("listing_date", ""),
+                        listing.get("url", ""),
+                        listing.get("image", ""),
+                        snapshot.as_of_date.strftime('%Y-%m-%d') if snapshot.as_of_date else ""
+                    ])
+                    rows_written += 1
+
+            output.seek(0)
+            csv_content = '\ufeff' + output.getvalue()
+
+            filename = f"listings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            return Response(
+                csv_content,
+                mimetype='text/csv; charset=utf-8',
+                headers={
+                    'Content-Disposition': f'attachment; filename={filename}'
+                }
+            )
 
     @app.route("/api/cards/import-csv", methods=["POST"])
     def api_import_csv():
