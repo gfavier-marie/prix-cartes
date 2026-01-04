@@ -701,14 +701,23 @@ def create_app() -> Flask:
 
             # Recuperer l'usage actuel
             usage = get_ebay_usage_summary(session)
-            remaining = usage.get("remaining", 5000)
+
+            # Utiliser les vrais rate limits eBay si disponibles, sinon fallback local
+            if usage.get("ebay_remaining") is not None:
+                remaining = usage.get("ebay_remaining")
+                daily_limit = usage.get("ebay_limit", 5000)
+                today_usage = usage.get("ebay_count", 0)
+            else:
+                remaining = usage.get("remaining", 5000)
+                daily_limit = usage.get("daily_limit", 5000)
+                today_usage = usage.get("today_count", 0)
 
             return jsonify({
                 "set_count": len(set_ids),
                 "total_cards": total_cards,
                 "estimated_calls": estimated_calls,
-                "today_usage": usage.get("today_count", 0),
-                "daily_limit": usage.get("daily_limit", 5000),
+                "today_usage": today_usage,
+                "daily_limit": daily_limit,
                 "remaining": remaining,
                 "will_exceed": estimated_calls > remaining,
             })
@@ -1458,10 +1467,10 @@ def create_app() -> Flask:
         types_enabled = set(types_param.split(","))
 
         with get_session() as session:
-            # Sous-requete pour obtenir le dernier snapshot par carte
+            # Sous-requete pour obtenir le dernier snapshot par carte (par ID, pas par date)
             latest_snapshot = session.query(
                 MarketSnapshot.card_id,
-                func.max(MarketSnapshot.as_of_date).label("max_date")
+                func.max(MarketSnapshot.id).label("max_id")
             ).group_by(MarketSnapshot.card_id).subquery()
 
             # Requete principale: cartes actives avec leur dernier snapshot
@@ -1470,8 +1479,7 @@ def create_app() -> Flask:
                 Card.id == latest_snapshot.c.card_id
             ).join(
                 MarketSnapshot,
-                (MarketSnapshot.card_id == latest_snapshot.c.card_id) &
-                (MarketSnapshot.as_of_date == latest_snapshot.c.max_date)
+                MarketSnapshot.id == latest_snapshot.c.max_id
             ).options(
                 joinedload(Card.set_info)
             ).filter(Card.is_active == True)

@@ -49,6 +49,78 @@
     </div>
 </div>
 
+<!-- Export des annonces eBay -->
+<div class="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-dark-700 dark:to-dark-700 rounded-xl border border-indigo-200 dark:border-dark-500 p-4 sm:p-6 mb-6">
+    <div class="flex flex-col gap-4">
+        <div>
+            <h3 class="font-semibold text-indigo-900 dark:text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Export des annonces eBay
+            </h3>
+            <p class="text-sm text-indigo-600 dark:text-gray-400 mt-1">Exporter toutes les annonces du dernier snapshot en CSV</p>
+        </div>
+        <div class="flex flex-wrap items-end gap-3">
+            <!-- Série -->
+            <div class="flex-shrink-0">
+                <label class="block text-xs font-medium text-indigo-700 dark:text-indigo-300 mb-1">Série</label>
+                <select id="export-series" onchange="onExportSeriesChange()"
+                        class="px-3 py-2 text-sm bg-white dark:bg-dark-600 border border-indigo-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 min-w-[160px]">
+                    <option value="">Toutes les séries</option>
+                    {% for serie in series_sets %}
+                    <option value="{{ serie.serie_id }}">{{ serie.serie_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <!-- Prix min -->
+            <div class="flex-shrink-0">
+                <label class="block text-xs font-medium text-indigo-700 dark:text-indigo-300 mb-1">Prix min</label>
+                <div class="relative">
+                    <input type="number" id="export-price-min" min="0" step="0.01" placeholder="0"
+                           class="w-24 px-3 py-2 text-sm bg-white dark:bg-dark-600 border border-indigo-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+                </div>
+            </div>
+            <!-- Prix max -->
+            <div class="flex-shrink-0">
+                <label class="block text-xs font-medium text-indigo-700 dark:text-indigo-300 mb-1">Prix max</label>
+                <div class="relative">
+                    <input type="number" id="export-price-max" min="0" step="0.01" placeholder="∞"
+                           class="w-24 px-3 py-2 text-sm bg-white dark:bg-dark-600 border border-indigo-300 dark:border-dark-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">€</span>
+                </div>
+            </div>
+            <!-- Types -->
+            <div class="flex items-center gap-4 px-4 py-2 bg-white dark:bg-dark-600 rounded-lg border border-indigo-300 dark:border-dark-500">
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="export-type-normal" checked class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Normal</span>
+                </label>
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="export-type-reverse" checked class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Reverse</span>
+                </label>
+                <label class="inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="export-type-graded" checked class="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500">
+                    <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Graded</span>
+                </label>
+            </div>
+            <!-- Bouton export -->
+            <button id="export-listings-btn" class="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Exporter
+            </button>
+        </div>
+        <!-- Sets (apparait quand une série est sélectionnée) -->
+        <div id="export-sets-container" class="hidden mt-3 pt-3 border-t border-indigo-200 dark:border-dark-500">
+            <div class="flex flex-wrap gap-1.5" id="export-sets-list"></div>
+        </div>
+    </div>
+</div>
+
 <!-- Queue Status -->
 <div id="queue-status" class="hidden bg-white dark:bg-dark-700 rounded-xl border border-gray-200 dark:border-dark-500 p-4 sm:p-6 mb-6">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -307,6 +379,62 @@ async function refreshStats() {
     } catch (e) { showToast('Erreur', 'error'); }
     finally { btn.disabled = false; btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Actualiser'; }
 }
+
+// Export listings - données des sets par série
+const seriesSetsData = {
+    {% for serie in series_sets %}
+    "{{ serie.serie_id }}": [
+        {% for set in serie.sets %}
+        {id: "{{ set.id }}", name: "{{ set.name }}"}{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ]{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+function onExportSeriesChange() {
+    const serieId = document.getElementById('export-series').value;
+    const container = document.getElementById('export-sets-container');
+    const setsList = document.getElementById('export-sets-list');
+
+    if (!serieId) {
+        container.classList.add('hidden');
+        setsList.innerHTML = '';
+        return;
+    }
+
+    const sets = seriesSetsData[serieId] || [];
+    if (sets.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+    setsList.innerHTML = sets.map(set => `
+        <label class="inline-flex items-center px-2 py-1 bg-white dark:bg-dark-700 rounded border border-indigo-200 dark:border-dark-500 cursor-pointer hover:bg-indigo-100 dark:hover:bg-dark-600 hover:border-indigo-400 transition-colors">
+            <input type="checkbox" class="export-set-cb w-3 h-3 text-indigo-600 border-gray-300 rounded" value="${set.id}">
+            <span class="ml-1.5 text-xs text-gray-700 dark:text-gray-300">${set.name}</span>
+        </label>
+    `).join('');
+}
+
+document.getElementById('export-listings-btn').addEventListener('click', function() {
+    const series = document.getElementById('export-series').value;
+    const priceMin = document.getElementById('export-price-min').value;
+    const priceMax = document.getElementById('export-price-max').value;
+    const selectedSets = Array.from(document.querySelectorAll('.export-set-cb:checked')).map(cb => cb.value);
+    const types = [];
+    if (document.getElementById('export-type-normal').checked) types.push('normal');
+    if (document.getElementById('export-type-reverse').checked) types.push('reverse');
+    if (document.getElementById('export-type-graded').checked) types.push('graded');
+    if (types.length === 0) { showToast('Selectionnez au moins un type', 'error'); return; }
+    const params = new URLSearchParams();
+    if (series) params.set('series', series);
+    if (selectedSets.length > 0) params.set('sets', selectedSets.join(','));
+    if (priceMin) params.set('price_min', priceMin);
+    if (priceMax) params.set('price_max', priceMax);
+    params.set('types', types.join(','));
+    window.location.href = '/export/listings?' + params.toString();
+});
 
 document.getElementById('auto-launch-btn').addEventListener('click', async function() {
     const limit = document.getElementById('auto-limit').value;
