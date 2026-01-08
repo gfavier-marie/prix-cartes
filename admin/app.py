@@ -21,6 +21,32 @@ from src.batch.queue import get_queue
 from src.ebay import EbayQueryBuilder
 from src.ebay.usage_tracker import get_ebay_usage_summary
 import threading
+from datetime import timedelta
+
+
+def cleanup_orphan_batches() -> int:
+    """Marque les batches orphelins (> 6h sans finished_at) comme termines.
+
+    Un batch orphelin est un batch dont le processus a crashe ou ete arrete
+    sans avoir pu definir finished_at. Ces batches restent "En cours..." indefiniment.
+
+    Returns:
+        Le nombre de batches nettoyes.
+    """
+    with get_session() as session:
+        cutoff = datetime.utcnow() - timedelta(hours=6)
+        orphans = session.query(BatchRun).filter(
+            BatchRun.finished_at == None,
+            BatchRun.started_at < cutoff
+        ).all()
+
+        for batch in orphans:
+            batch.finished_at = datetime.utcnow()
+            batch.notes = (batch.notes or "") + "\n*** ORPHELIN: Batch marque comme termine automatiquement ***"
+
+        session.commit()
+        return len(orphans)
+
 
 def get_sets_grouped_by_series():
     """Récupère les sets groupés par série, triés par date (ancien -> récent).
@@ -75,6 +101,14 @@ def create_app() -> Flask:
 
     config = get_config()
     app.secret_key = config.flask_secret_key
+
+    # Nettoyer les batches orphelins au demarrage
+    try:
+        orphans_cleaned = cleanup_orphan_batches()
+        if orphans_cleaned > 0:
+            print(f"[Admin] {orphans_cleaned} batch(es) orphelin(s) nettoye(s) au demarrage")
+    except Exception as e:
+        print(f"[Admin] Erreur lors du nettoyage des batches orphelins: {e}")
 
     @app.route("/")
     def index():

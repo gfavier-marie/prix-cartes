@@ -138,28 +138,31 @@ def run_batch(mode, limit, card_id):
 
     console.print(f"[cyan]Lancement du batch (mode: {batch_mode.value})...[/cyan]")
 
-    stats, anomalies = runner.run_with_progress(
-        mode=batch_mode,
-        card_ids=card_ids,
-        limit=limit,
-    )
+    try:
+        stats, anomalies = runner.run_with_progress(
+            mode=batch_mode,
+            card_ids=card_ids,
+            limit=limit,
+        )
 
-    console.print("\n[green]Batch termine:[/green]")
-    console.print(f"  Total: {stats.total_cards}")
-    console.print(f"  Succes: {stats.succeeded}")
-    console.print(f"  Echecs: {stats.failed}")
-    console.print(f"  Exclus (faible valeur): {stats.skipped}")
+        console.print("\n[green]Batch termine:[/green]")
+        console.print(f"  Total: {stats.total_cards}")
+        console.print(f"  Succes: {stats.succeeded}")
+        console.print(f"  Echecs: {stats.failed}")
+        console.print(f"  Exclus (faible valeur): {stats.skipped}")
 
-    if anomalies.high_dispersions:
-        console.print(f"\n[yellow]Attention: {len(anomalies.high_dispersions)} cartes avec haute dispersion[/yellow]")
+        if anomalies.high_dispersions:
+            console.print(f"\n[yellow]Attention: {len(anomalies.high_dispersions)} cartes avec haute dispersion[/yellow]")
 
-    if anomalies.mismatches:
-        console.print(f"[yellow]Attention: {len(anomalies.mismatches)} fallbacks Cardmarket[/yellow]")
+        if anomalies.mismatches:
+            console.print(f"[yellow]Attention: {len(anomalies.mismatches)} fallbacks Cardmarket[/yellow]")
 
-    if anomalies.query_issues:
-        console.print(f"[red]Erreurs de requete: {len(anomalies.query_issues)}[/red]")
-        for issue in anomalies.query_issues[:5]:
-            console.print(f"  - {issue['name']}: {issue['error']}")
+        if anomalies.query_issues:
+            console.print(f"[red]Erreurs de requete: {len(anomalies.query_issues)}[/red]")
+            for issue in anomalies.query_issues[:5]:
+                console.print(f"  - {issue['name']}: {issue['error']}")
+    finally:
+        runner.close()
 
 
 @cli.command("export-csv")

@@ -107,12 +107,9 @@ class BatchRunner:
 
     def _on_api_call(self, count: int = 1) -> None:
         """Callback appele apres chaque appel API."""
-        # Compteur de session (pour verification limite)
+        # Compteur de session uniquement en memoire (evite "database is locked")
         self._session_call_count += count
-
-        if self._usage_tracker and self._usage_session:
-            self._usage_tracker.increment(count)
-            self._usage_session.commit()
+        # L'usage API sera mis a jour en DB a la fin du batch dans close()
 
     def get_api_usage_today(self) -> dict:
         """Retourne l'usage API du jour."""
@@ -145,7 +142,14 @@ class BatchRunner:
         return False
 
     def close(self) -> None:
-        """Ferme la session de tracking."""
+        """Ferme la session de tracking et sauvegarde l'usage API."""
+        if self._usage_session and self._usage_tracker and self._session_call_count > 0:
+            try:
+                # Mettre a jour l'usage API en une seule fois a la fin
+                self._usage_tracker.increment(self._session_call_count)
+                self._usage_session.commit()
+            except Exception:
+                pass  # Ignorer les erreurs de commit a la fermeture
         if self._usage_session:
             self._usage_session.close()
             self._usage_session = None
@@ -243,53 +247,24 @@ class BatchRunner:
             # Resultats detailles pour export CSV
             card_results: list[dict] = []
 
-            # Traiter chaque carte
-            for i, card in enumerate(cards):
-                # Verifier si l'arret a ete demande
-                if is_stop_requested():
-                    console.print("[yellow]Batch interrompu par l'utilisateur[/yellow]")
-                    break
+            # Traiter chaque carte avec try/finally pour garantir la finalisation
+            try:
+                for i, card in enumerate(cards):
+                    # Verifier si l'arret a ete demande
+                    if is_stop_requested():
+                        console.print("[yellow]Batch interrompu par l'utilisateur[/yellow]")
+                        break
 
-                # Verifier la limite API quotidienne AVANT de traiter la carte
-                if self._check_api_limit(session):
-                    console.print("[yellow]Limite API quotidienne atteinte, arret du batch[/yellow]")
-                    stats.stopped_api_limit = True
-                    break
+                    # Verifier la limite API quotidienne AVANT de traiter la carte
+                    if self._check_api_limit(session):
+                        console.print("[yellow]Limite API quotidienne atteinte, arret du batch[/yellow]")
+                        stats.stopped_api_limit = True
+                        break
 
-                # Verifier si le set de cette carte est a ignorer
-                if card.set_id in skipped_sets:
-                    stats.skipped += 1
-                    stats.processed += 1
-                    card_results.append({
-                        "card_id": card.id,
-                        "tcgdex_id": card.tcgdex_id,
-                        "name": card.name,
-                        "set_id": card.set_id,
-                        "set_name": card.set_name,
-                        "status": "skipped",
-                        "error": f"Set {card.set_id} ignore (trop d'echecs)"
-                    })
-                    continue
-
-                try:
-                    result = self._process_card(session, card, mode, anomalies)
-
-                    if result == "success":
-                        stats.succeeded += 1
-                        # Reset compteur du set en cas de succes
-                        if card.set_id in set_failures:
-                            set_failures[card.set_id] = 0
-                        card_results.append({
-                            "card_id": card.id,
-                            "tcgdex_id": card.tcgdex_id,
-                            "name": card.name,
-                            "set_id": card.set_id,
-                            "set_name": card.set_name,
-                            "status": "success",
-                            "error": None
-                        })
-                    elif result == "skipped":
+                    # Verifier si le set de cette carte est a ignorer
+                    if card.set_id in skipped_sets:
                         stats.skipped += 1
+                        stats.processed += 1
                         card_results.append({
                             "card_id": card.id,
                             "tcgdex_id": card.tcgdex_id,
@@ -297,17 +272,62 @@ class BatchRunner:
                             "set_id": card.set_id,
                             "set_name": card.set_name,
                             "status": "skipped",
-                            "error": None
+                            "error": f"Set {card.set_id} ignore (trop d'echecs)"
                         })
-                    elif result == "failed":
-                        stats.failed += 1
-                        # Incrementer compteur d'echecs pour ce set
-                        set_failures[card.set_id] = set_failures.get(card.set_id, 0) + 1
-                        if set_failures[card.set_id] >= MAX_SET_FAILURES:
-                            console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
-                            skipped_sets.add(card.set_id)
-                            stats.skipped_sets.append(card.set_id)
-                        # Recuperer l'erreur depuis la carte
+                        continue
+
+                    try:
+                        result = self._process_card(session, card, mode, anomalies)
+
+                        if result == "success":
+                            stats.succeeded += 1
+                            # Reset compteur du set en cas de succes
+                            if card.set_id in set_failures:
+                                set_failures[card.set_id] = 0
+                            card_results.append({
+                                "card_id": card.id,
+                                "tcgdex_id": card.tcgdex_id,
+                                "name": card.name,
+                                "set_id": card.set_id,
+                                "set_name": card.set_name,
+                                "status": "success",
+                                "error": None
+                            })
+                        elif result == "skipped":
+                            stats.skipped += 1
+                            card_results.append({
+                                "card_id": card.id,
+                                "tcgdex_id": card.tcgdex_id,
+                                "name": card.name,
+                                "set_id": card.set_id,
+                                "set_name": card.set_name,
+                                "status": "skipped",
+                                "error": None
+                            })
+                        elif result == "failed":
+                            stats.failed += 1
+                            # Incrementer compteur d'echecs pour ce set
+                            set_failures[card.set_id] = set_failures.get(card.set_id, 0) + 1
+                            if set_failures[card.set_id] >= MAX_SET_FAILURES:
+                                console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
+                                skipped_sets.add(card.set_id)
+                                stats.skipped_sets.append(card.set_id)
+                            # Recuperer l'erreur depuis la carte
+                            card_results.append({
+                                "card_id": card.id,
+                                "tcgdex_id": card.tcgdex_id,
+                                "name": card.name,
+                                "set_id": card.set_id,
+                                "set_name": card.set_name,
+                                "status": "failed",
+                                "error": card.last_error
+                            })
+
+                    except EbayRateLimitError:
+                        # Erreur 429: activer le blocage et arreter immediatement
+                        console.print("[red]Erreur 429 - Rate limit eBay atteint, arret du batch[/red]")
+                        set_rate_limited()
+                        stats.stopped_rate_limit = True
                         card_results.append({
                             "card_id": card.id,
                             "tcgdex_id": card.tcgdex_id,
@@ -315,69 +335,55 @@ class BatchRunner:
                             "set_id": card.set_id,
                             "set_name": card.set_name,
                             "status": "failed",
-                            "error": card.last_error
+                            "error": "Erreur 429 - Rate limit eBay"
+                        })
+                        break
+
+                    except Exception as e:
+                        stats.failed += 1
+                        stats.errors.append((card.id, str(e)))
+                        console.print(f"[red]Error processing card {card.id}: {e}[/red]")
+                        # Incrementer compteur d'echecs pour ce set
+                        set_failures[card.set_id] = set_failures.get(card.set_id, 0) + 1
+                        if set_failures[card.set_id] >= MAX_SET_FAILURES:
+                            console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
+                            skipped_sets.add(card.set_id)
+                            stats.skipped_sets.append(card.set_id)
+                        card_results.append({
+                            "card_id": card.id,
+                            "tcgdex_id": card.tcgdex_id,
+                            "name": card.name,
+                            "set_id": card.set_id,
+                            "set_name": card.set_name,
+                            "status": "failed",
+                            "error": str(e)
                         })
 
-                except EbayRateLimitError:
-                    # Erreur 429: activer le blocage et arreter immediatement
-                    console.print("[red]Erreur 429 - Rate limit eBay atteint, arret du batch[/red]")
-                    set_rate_limited()
-                    stats.stopped_rate_limit = True
-                    card_results.append({
-                        "card_id": card.id,
-                        "tcgdex_id": card.tcgdex_id,
-                        "name": card.name,
-                        "set_id": card.set_id,
-                        "set_name": card.set_name,
-                        "status": "failed",
-                        "error": "Erreur 429 - Rate limit eBay"
-                    })
-                    break
+                    stats.processed += 1
 
-                except Exception as e:
-                    stats.failed += 1
-                    stats.errors.append((card.id, str(e)))
-                    console.print(f"[red]Error processing card {card.id}: {e}[/red]")
-                    # Incrementer compteur d'echecs pour ce set
-                    set_failures[card.set_id] = set_failures.get(card.set_id, 0) + 1
-                    if set_failures[card.set_id] >= MAX_SET_FAILURES:
-                        console.print(f"[yellow]Set {card.set_id} ignore apres {MAX_SET_FAILURES} echecs[/yellow]")
-                        skipped_sets.add(card.set_id)
-                        stats.skipped_sets.append(card.set_id)
-                    card_results.append({
-                        "card_id": card.id,
-                        "tcgdex_id": card.tcgdex_id,
-                        "name": card.name,
-                        "set_id": card.set_id,
-                        "set_name": card.set_name,
-                        "status": "failed",
-                        "error": str(e)
-                    })
+                    # Mettre a jour les compteurs toutes les 5 cartes
+                    if stats.processed % 5 == 0 or stats.processed == stats.total_cards:
+                        batch_run.cards_succeeded = stats.succeeded
+                        batch_run.cards_failed = stats.failed
+                        session.commit()
 
-                stats.processed += 1
+                    if progress_callback:
+                        progress_callback(stats.processed, stats.total_cards, stats.succeeded, stats.failed)
 
-                # Mettre a jour les compteurs toutes les 5 cartes
-                if stats.processed % 5 == 0 or stats.processed == stats.total_cards:
-                    batch_run.cards_succeeded = stats.succeeded
-                    batch_run.cards_failed = stats.failed
-                    session.commit()
+            finally:
+                # TOUJOURS finaliser le batch, meme en cas d'exception
+                batch_run.finished_at = datetime.utcnow()
+                batch_run.cards_succeeded = stats.succeeded
+                batch_run.cards_failed = stats.failed
 
-                if progress_callback:
-                    progress_callback(stats.processed, stats.total_cards, stats.succeeded, stats.failed)
+                # Generer le rapport
+                report = self._generate_report(stats, anomalies)
+                batch_run.notes = report
 
-            # Finaliser le batch
-            batch_run.finished_at = datetime.utcnow()
-            batch_run.cards_succeeded = stats.succeeded
-            batch_run.cards_failed = stats.failed
+                # Sauvegarder les resultats detailles pour export CSV
+                batch_run.set_results(card_results)
 
-            # Generer le rapport
-            report = self._generate_report(stats, anomalies)
-            batch_run.notes = report
-
-            # Sauvegarder les resultats detailles pour export CSV
-            batch_run.set_results(card_results)
-
-            session.commit()
+                session.commit()
 
         # Rafraichir les rate limits eBay a la fin du batch (verification)
         final_limits = refresh_rate_limits_from_ebay()
@@ -409,10 +415,14 @@ class BatchRunner:
         Recupere les cartes a traiter avec regles de priorisation.
 
         Ordre de priorite (si prioritize_oldest=True):
-        1. Cartes jamais explorees (pas de snapshot)
-        2. Cartes en erreur < max_error_retries (cooldown 24h)
-        3. Cartes en erreur >= max_error_retries OU valeur < seuil (1x par low_value_refresh_days)
-        4. Autres cartes (plus ancien d'abord)
+        - P0: Cartes jamais parcourues (pas de snapshot) ou p50 NULL
+              - Sans erreur: incluses immediatement
+              - Avec erreur < max: cooldown 24h
+              - Avec erreur >= max: cooldown 60j (low_value_refresh_days)
+        - P1: Cartes basse valeur (p50 < seuil) avec snapshot > 60j
+        - P2: Cartes forte valeur (p50 >= seuil) - toujours incluses
+
+        Triees par anciennete du snapshot (plus ancien d'abord).
 
         Args:
             prioritize_oldest: Si True, applique les regles de priorisation
@@ -458,10 +468,9 @@ class BatchRunner:
             max_error_cooldown = datetime.utcnow() - timedelta(days=low_value_refresh_days)
 
             # Construire la query avec priorites
-            # Priority 0: jamais explore ET pas trop d'erreurs
-            # Priority 1: erreur < max_retries et cooldown 24h OK
-            # Priority 2: (erreur >= max_retries OU valeur < seuil) et cooldown X jours OK
-            # Priority 3: valeur >= seuil, plus ancien d'abord
+            # Priority 0: jamais parcourue (pas de snapshot OU p50 NULL sans erreur)
+            # Priority 1: basse valeur (p50 < seuil) avec snapshot > low_value_refresh_days
+            # Priority 2: forte valeur (p50 >= seuil) - toujours incluse, triee par anciennete
 
             query = session.query(Card).join(
                 Set, Card.set_id == Set.id
@@ -472,64 +481,57 @@ class BatchRunner:
                 Card.is_active == True,
             ).filter(
                 or_(
-                    # Jamais explore ET pas d'erreur du tout -> priorite haute
+                    # P0: Jamais parcourue sans erreur
                     and_(
                         snapshot_with_price.c.card_id.is_(None),
-                        Card.error_count == 0,
-                        Card.last_error_at.is_(None)
+                        Card.error_count == 0
                     ),
-                    # Jamais explore ET erreur < max_retries -> cooldown 24h
+                    # P0: Jamais parcourue avec erreur < max + cooldown 24h OK
                     and_(
                         snapshot_with_price.c.card_id.is_(None),
-                        Card.error_count < max_error_retries,
                         Card.error_count > 0,
+                        Card.error_count < max_error_retries,
                         Card.last_error_at < error_cooldown
                     ),
-                    # Jamais explore MAIS trop d'erreurs -> cooldown X jours depuis last_error_at
+                    # P0: Jamais parcourue avec trop d'erreurs + cooldown 60j OK
                     and_(
                         snapshot_with_price.c.card_id.is_(None),
                         Card.error_count >= max_error_retries,
                         or_(Card.last_error_at.is_(None), Card.last_error_at < max_error_cooldown)
                     ),
-                    # Avec snapshot ET erreur < max_retries -> cooldown 24h
+                    # P0: p50 NULL sans erreur (snapshot existe mais pas de prix)
                     and_(
                         snapshot_with_price.c.card_id.isnot(None),
+                        snapshot_with_price.c.p50.is_(None),
+                        Card.error_count == 0
+                    ),
+                    # P1: Basse valeur avec snapshot > 60j
+                    and_(
+                        snapshot_with_price.c.card_id.isnot(None),
+                        snapshot_with_price.c.p50 < low_value_threshold,
+                        snapshot_with_price.c.as_of_date < low_value_cooldown,
                         Card.error_count < max_error_retries,
                         or_(Card.last_error_at.is_(None), Card.last_error_at < error_cooldown)
                     ),
-                    # Erreur >= max_retries avec snapshot -> cooldown X jours
+                    # P2: Forte valeur - toujours incluse (pas de filtre date)
                     and_(
-                        Card.error_count >= max_error_retries,
                         snapshot_with_price.c.card_id.isnot(None),
-                        snapshot_with_price.c.as_of_date < low_value_cooldown
-                    ),
-                    # Basse valeur -> cooldown X jours
-                    and_(
+                        snapshot_with_price.c.p50 >= low_value_threshold,
                         Card.error_count < max_error_retries,
-                        snapshot_with_price.c.p50 < low_value_threshold,
-                        snapshot_with_price.c.as_of_date < low_value_cooldown
-                    ),
-                    # Haute valeur -> toujours inclus (sera trie par anciennete)
-                    and_(
-                        Card.error_count < max_error_retries,
-                        or_(
-                            snapshot_with_price.c.p50 >= low_value_threshold,
-                            snapshot_with_price.c.p50.is_(None)
-                        )
+                        or_(Card.last_error_at.is_(None), Card.last_error_at < error_cooldown)
                     ),
                 )
             ).order_by(
-                # Priorite: 0=jamais explore sans erreur, 1=erreur en cooldown, 2=basse valeur/erreur max, 3=haute valeur
+                # Priorite: 0=jamais parcourue, 1=basse valeur, 2=forte valeur
                 case(
-                    # Jamais explore ET pas d'erreur -> priorite 0
-                    (and_(snapshot_with_price.c.card_id.is_(None), Card.error_count == 0), 0),
-                    # Erreur < max_retries (avec ou sans snapshot) -> priorite 1
-                    (and_(Card.error_count > 0, Card.error_count < max_error_retries), 1),
-                    # Trop d'erreurs (avec ou sans snapshot) -> priorite 2
-                    (Card.error_count >= max_error_retries, 2),
-                    # Basse valeur -> priorite 2
-                    (snapshot_with_price.c.p50 < low_value_threshold, 2),
-                    else_=3  # Haute valeur normale
+                    # P0: Jamais parcouree (pas de snapshot)
+                    (snapshot_with_price.c.card_id.is_(None), 0),
+                    # P0: p50 NULL (a explorer)
+                    (snapshot_with_price.c.p50.is_(None), 0),
+                    # P1: Basse valeur
+                    (snapshot_with_price.c.p50 < low_value_threshold, 1),
+                    # P2: Forte valeur
+                    else_=2
                 ),
                 snapshot_with_price.c.as_of_date.asc().nullsfirst()  # Plus ancien d'abord
             )
@@ -734,7 +736,7 @@ class BatchRunner:
         ) as progress:
             task = progress.add_task("Processing cards...", total=100)
 
-            def callback(processed: int, total: int):
+            def callback(processed: int, total: int, succeeded: int = 0, failed: int = 0):
                 progress.update(task, completed=int(processed / total * 100) if total > 0 else 0)
 
             return self.run(mode, card_ids, set_id, limit, callback)

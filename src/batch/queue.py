@@ -216,6 +216,7 @@ class BatchQueue:
         from .runner import BatchRunner
         from ..models import BatchMode
 
+        runner = None
         try:
             # Callback pour mettre a jour la progression en temps reel
             def progress_callback(processed: int, total: int, succeeded: int = 0, failed: int = 0):
@@ -247,6 +248,12 @@ class BatchQueue:
 
         finally:
             item.finished_at = datetime.utcnow()
+            # Fermer le runner pour liberer les ressources
+            if runner:
+                try:
+                    runner.close()
+                except Exception:
+                    pass
             # Rafraichir les rate limits eBay
             try:
                 from ..ebay.usage_tracker import refresh_rate_limits_from_ebay

@@ -686,7 +686,17 @@ class EbayWorker:
                 last_seen_at=previous_snapshot.created_at,
                 is_reverse=is_reverse,
             )
-            session.add(sold_listing)
-            sold.append(sold_listing)
+
+            # Utiliser un savepoint pour gerer les doublons sans rollback complet
+            try:
+                with session.begin_nested():  # Cree un savepoint
+                    session.add(sold_listing)
+                    session.flush()
+                sold.append(sold_listing)
+            except Exception:
+                # Doublon ou autre erreur - le savepoint est automatiquement rollback
+                # Continuer sans affecter les autres changements de la session
+                session.expunge(sold_listing) if sold_listing in session else None
+                continue
 
         return sold
